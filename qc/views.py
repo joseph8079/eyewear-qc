@@ -173,5 +173,62 @@ def download_frames_csv_template(request):
     writer.writerow(["STY-1001", "Acme Optical", "STY-1001-BLK-52", "Black", "52-18-140", "OK"])
 
     return response
+import csv
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.contrib.auth.decorators import login_required
+
+from .models import FrameVariant, Complaint
+from .forms import ComplaintForm
+
+
+@login_required
+def complaint_create_for_frame(request, pk):
+    """
+    Creates a complaint tied to a specific FrameVariant (pk).
+    Your Complaint model requires variant FK, but ComplaintForm does not include it,
+    so we set it here.
+    """
+    variant = get_object_or_404(FrameVariant, pk=pk)
+
+    if request.method == "POST":
+        form = ComplaintForm(request.POST, request.FILES)
+        if form.is_valid():
+            complaint = form.save(commit=False)
+            complaint.variant = variant
+            complaint.save()
+            return redirect("qc:frame_detail", pk=variant.pk)
+    else:
+        form = ComplaintForm()
+
+    return render(
+        request,
+        "qc/complaint_form.html",
+        {
+            "form": form,
+            "variant": variant,
+        },
+    )
+
+
+@login_required
+def download_frames_template(request):
+    """
+    Downloads a CSV template for importing frames.
+    Match this header to whatever your import expects.
+    """
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="frames_template.csv"'
+
+    writer = csv.writer(response)
+
+    # TEMPLATE COLUMNS (edit if your importer uses different names)
+    writer.writerow(["style_code", "supplier", "sku", "color", "size", "status"])
+
+    # Optional: example row (delete if you want a blank file)
+    writer.writerow(["ST123", "Acme", "ST123-001", "Black", "52-18", "OK"])
+
+    return response
+
 
 

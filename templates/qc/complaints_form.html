@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+  <h1>New Complaint for {{ variant.style.style_code }} ({{ variant.sku }})</h1>
+
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Save Complaint</button>
+  </form>
+
+  <p><a href="{% url 'qc:frame_detail' variant.pk %}">Back to frame</a></p>
+{% endblock %}
