@@ -13,4 +13,8 @@ urlpatterns = [
     path("complaints/", views.complaints_list, name="complaints_list"),
 
     path("import/frames/", views.import_frames, name="import_frames"),
+    path("complaints/new/", views.complaint_create, name="complaint_create"),
+    path("frames/<int:frame_id>/complaints/new/", views.complaint_create, name="complaint_create_for_frame"),
+    path("download/frames-template/", views.download_frames_csv_template, name="download_frames_template"),
+
 ]

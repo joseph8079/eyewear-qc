@@ -26,8 +26,15 @@ class FrameForm(forms.ModelForm):
         if commit:
             frame.save()
         return frame
+
+
 class ComplaintForm(forms.ModelForm):
     class Meta:
         model = Complaint
-        fields = ["store", "failure_type", "severity", "notes"]
+        fields = ["variant", "store", "failure_type", "severity", "notes"]
 
+    # UI label only (keeps DB field name "variant")
+    variant = forms.ModelChoiceField(
+        queryset=FrameVariant.objects.all().order_by("style__style_code", "sku"),
+        label="Frame",
+    )

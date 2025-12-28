@@ -103,28 +103,26 @@ def frame_edit(request, pk):
     )
 
 
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth.decorators import login_required
+from .forms import ComplaintForm
+from .models import FrameVariant
+
 @login_required
-def complaint_create_for_frame(request, pk):
-    frame = get_object_or_404(FrameVariant.objects.select_related("style"), pk=pk)
+def complaint_create(request, frame_id=None):
+    initial = {}
+    if frame_id:
+        initial["variant"] = get_object_or_404(FrameVariant, pk=frame_id)
 
     if request.method == "POST":
-        form = ComplaintForm(request.POST)
-        files = request.FILES.getlist("attachments")
-
+        form = ComplaintForm(request.POST, request.FILES, initial=initial)
         if form.is_valid():
-            complaint = form.save(commit=False)
-            complaint.variant = frame
-            complaint.save()
-
-            for f in files:
-                ComplaintAttachment.objects.create(complaint=complaint, file=f)
-
-            messages.success(request, "Complaint added.")
-            return redirect("frame_detail", pk=frame.pk)
+            form.save()
+            return redirect("complaints_list")
     else:
-        form = ComplaintForm()
+        form = ComplaintForm(initial=initial)
 
-    return render(request, "qc/complaint_create.html", {"form": form, "frame": frame})
+    return render(request, "qc/complaint_create.html", {"form": form})
 
 
 @login_required
@@ -158,4 +156,22 @@ def import_frames(request):
             return redirect("import_frames")
 
     return render(request, "qc/import_frames.html")
+
+import csv
+from django.http import HttpResponse
+from django.contrib.auth.decorators import login_required
+
+@login_required
+def download_frames_csv_template(request):
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="Ctrue_Quality_Tracker_Frames_Template.csv"'
+
+    writer = csv.writer(response)
+    writer.writerow(["style_code", "supplier", "sku", "color", "size", "status"])
+
+    # optional example row
+    writer.writerow(["STY-1001", "Acme Optical", "STY-1001-BLK-52", "Black", "52-18-140", "OK"])
+
+    return response
+
 
