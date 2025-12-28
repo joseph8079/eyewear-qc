@@ -1,3 +1,4 @@
+{% load static %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -10,21 +11,27 @@
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
   <div class="container">
-    <a class="navbar-brand fw-semibold" href="/">Ctrue Quality Tracker</a>
+    <a class="navbar-brand fw-semibold" href="{% url 'home' %}">Ctrue Quality Tracker</a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav">
       <span class="navbar-toggler-icon"></span>
     </button>
+
     <div id="nav" class="collapse navbar-collapse">
       <ul class="navbar-nav me-auto">
-        <li class="nav-item"><a class="nav-link" href="/">Dashboard</a></li>
-        <li class="nav-item"><a class="nav-link" href="/frames/">Frames</a></li>
-        <li class="nav-item"><a class="nav-link" href="/complaints/">Complaints</a></li>
-        <li class="nav-item"><a class="nav-link" href="/import/frames/">Import CSV</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'home' %}">Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'frames_list' %}">Frames</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'complaints_list' %}">Complaints</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'import_frames' %}">Import CSV</a></li>
       </ul>
 
       <div class="d-flex gap-2">
         <a class="btn btn-outline-light btn-sm" href="/admin/">Admin</a>
-        <a class="btn btn-outline-light btn-sm" href="/accounts/logout/">Logout</a>
+
+        {% if request.user.is_authenticated %}
+          <a class="btn btn-outline-light btn-sm" href="{% url 'logout' %}">Logout</a>
+        {% else %}
+          <a class="btn btn-outline-light btn-sm" href="{% url 'login' %}">Login</a>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -33,7 +40,11 @@
 <div class="container py-4">
   {% if messages %}
     {% for message in messages %}
-      <div class="alert alert-{{ message.tags }} mb-3">{{ message }}</div>
+      {% if message.tags == "error" %}
+        <div class="alert alert-danger mb-3">{{ message }}</div>
+      {% else %}
+        <div class="alert alert-{{ message.tags }} mb-3">{{ message }}</div>
+      {% endif %}
     {% endfor %}
   {% endif %}
 
@@ -43,3 +54,4 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
+
