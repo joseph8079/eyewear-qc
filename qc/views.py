@@ -3,11 +3,13 @@ from __future__ import annotations
 import csv
 import io
 
+from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from .models import Complaint, FrameStyle, FrameVariant, Store
@@ -34,7 +36,7 @@ def frames_list(request):
     frames = (
         FrameVariant.objects
         .select_related("style")
-        .order_by("-created_at", "-id")
+        .order_by("-created_at")
     )
     return render(request, "qc/frames_list.html", {"frames": frames})
 
@@ -47,57 +49,128 @@ def complaints_list(request):
     complaints = (
         Complaint.objects
         .select_related("variant", "variant__style", "store")
-        .order_by("-created_at", "-id")
+        .order_by("-created_at")
     )
     return render(request, "qc/complaints_list.html", {"complaints": complaints})
 
 
+# =========================
+# FORMS
+# =========================
+class FrameCreateForm(forms.Form):
+    style_code = forms.CharField(max_length=64)
+    supplier = forms.CharField(max_length=255, required=False)
+    sku = forms.CharField(max_length=128)
+    color = forms.CharField(max_length=64, required=False)
+    size = forms.CharField(max_length=64, required=False)
+    status = forms.ChoiceField(choices=FrameVariant.STATUS_CHOICES)
+
+
+class ComplaintCreateForm(forms.Form):
+    variant = forms.ModelChoiceField(
+        queryset=FrameVariant.objects.select_related("style").order_by("sku")
+    )
+    store = forms.ModelChoiceField(
+        queryset=Store.objects.order_by("name"),
+        required=False
+    )
+    failure_type = forms.ChoiceField(choices=Complaint.FAILURE_CHOICES)
+    severity = forms.ChoiceField(choices=Complaint.SEVERITY_CHOICES)
+    notes = forms.CharField(widget=forms.Textarea, required=False)
+
+
 # -------------------------
-# CREATE COMPLAINT FOR FRAME
+# ADD FRAME
+# -------------------------
+@login_required
+@require_http_methods(["GET", "POST"])
+def frame_create(request):
+    if request.method == "POST":
+        form = FrameCreateForm(request.POST)
+        if form.is_valid():
+            style, _ = FrameStyle.objects.get_or_create(
+                style_code=form.cleaned_data["style_code"],
+                defaults={"supplier": form.cleaned_data.get("supplier", "")},
+            )
+
+            FrameVariant.objects.update_or_create(
+                sku=form.cleaned_data["sku"],
+                defaults={
+                    "style": style,
+                    "color": form.cleaned_data.get("color", ""),
+                    "size": form.cleaned_data.get("size", ""),
+                    "status": form.cleaned_data["status"],
+                    "created_at": timezone.now(),
+                },
+            )
+
+            messages.success(request, "Frame saved.")
+            return redirect("frames_list")
+    else:
+        form = FrameCreateForm(initial={"status": "OK"})
+
+    return render(request, "qc/frame_form.html", {"form": form})
+
+
+# -------------------------
+# ADD COMPLAINT (STANDALONE)
+# -------------------------
+@login_required
+@require_http_methods(["GET", "POST"])
+def complaint_create(request):
+    if request.method == "POST":
+        form = ComplaintCreateForm(request.POST)
+        if form.is_valid():
+            Complaint.objects.create(
+                variant=form.cleaned_data["variant"],
+                store=form.cleaned_data.get("store"),
+                failure_type=form.cleaned_data["failure_type"],
+                severity=form.cleaned_data["severity"],
+                notes=form.cleaned_data.get("notes", ""),
+                created_at=timezone.now(),
+            )
+            messages.success(request, "Complaint created.")
+            return redirect("complaints_list")
+    else:
+        form = ComplaintCreateForm()
+
+    return render(request, "qc/complaint_form.html", {"form": form})
+
+
+# -------------------------
+# ADD COMPLAINT FOR FRAME
 # -------------------------
 @login_required
 @require_http_methods(["GET", "POST"])
 def complaint_create_for_frame(request, pk: int):
-    variant = get_object_or_404(
-        FrameVariant.objects.select_related("style"),
-        pk=pk
-    )
+    variant = get_object_or_404(FrameVariant, pk=pk)
 
     if request.method == "POST":
-        store_id = request.POST.get("store") or None
-        failure_type = request.POST.get("failure_type") or "OTHER"
-        severity = request.POST.get("severity") or "LOW"
-        notes = request.POST.get("notes") or ""
-
-        store = Store.objects.filter(id=store_id).first() if store_id else None
-
-        # IMPORTANT: don't set created_at manually if model uses auto_now_add=True
         Complaint.objects.create(
             variant=variant,
-            store=store,
-            failure_type=failure_type,
-            severity=severity,
-            notes=notes,
+            store_id=request.POST.get("store") or None,
+            failure_type=request.POST.get("failure_type"),
+            severity=request.POST.get("severity"),
+            notes=request.POST.get("notes", ""),
+            created_at=timezone.now(),
         )
-
-        messages.success(request, f"Complaint created for {variant.sku}")
+        messages.success(request, f"Complaint added for {variant.sku}")
         return redirect("complaints_list")
 
-    stores = Store.objects.order_by("name")
     return render(
         request,
         "qc/complaint_form.html",
         {
             "variant": variant,
-            "stores": stores,
-            "failure_choices": getattr(Complaint, "FAILURE_CHOICES", None),
-            "severity_choices": getattr(Complaint, "SEVERITY_CHOICES", None),
+            "stores": Store.objects.all(),
+            "failure_choices": Complaint.FAILURE_CHOICES,
+            "severity_choices": Complaint.SEVERITY_CHOICES,
         },
     )
 
 
 # -------------------------
-# CSV TEMPLATE DOWNLOAD
+# CSV TEMPLATE
 # -------------------------
 @login_required
 def download_frames_template(request):
@@ -107,13 +180,13 @@ def download_frames_template(request):
     writer.writerow(["style_code", "supplier", "sku", "color", "size", "status"])
     writer.writerow(["RB1234", "Luxottica", "RB1234-001-52", "Black", "52-18-140", "OK"])
 
-    resp = HttpResponse(output.getvalue(), content_type="text/csv")
-    resp["Content-Disposition"] = 'attachment; filename="frames_import_template.csv"'
-    return resp
+    response = HttpResponse(output.getvalue(), content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="frames_template.csv"'
+    return response
 
 
 # -------------------------
-# IMPORT FRAMES (CSV UPLOAD)
+# IMPORT FRAMES
 # -------------------------
 @login_required
 @require_http_methods(["GET", "POST"])
@@ -121,88 +194,32 @@ def import_frames(request):
     if request.method == "POST":
         f = request.FILES.get("file")
         if not f:
-            messages.error(request, "Please choose a CSV file.")
+            messages.error(request, "Upload a CSV file.")
             return redirect("import_frames")
 
         raw = f.read().decode("utf-8-sig", errors="replace")
         reader = csv.DictReader(io.StringIO(raw))
 
-        required = {"style_code", "sku"}
-        if not reader.fieldnames or not required.issubset(set(reader.fieldnames)):
-            messages.error(
-                request,
-                f"CSV must include at least these columns: {', '.join(sorted(required))}",
-            )
-            return redirect("import_frames")
-
-        created_variants = 0
-        updated_variants = 0
-        created_styles = 0
-        updated_styles = 0
-
         with transaction.atomic():
             for row in reader:
-                style_code = (row.get("style_code") or "").strip()
-                supplier = (row.get("supplier") or "").strip()
-                sku = (row.get("sku") or "").strip()
-                color = (row.get("color") or "").strip()
-                size = (row.get("size") or "").strip()
-                status = (row.get("status") or "OK").strip().upper()
-
-                if not style_code or not sku:
-                    continue
-
-                if status not in {"OK", "HOLD", "OFF"}:
-                    status = "OK"
-
-                style, style_created = FrameStyle.objects.get_or_create(
-                    style_code=style_code,
-                    defaults={"supplier": supplier},
+                style, _ = FrameStyle.objects.get_or_create(
+                    style_code=row["style_code"],
+                    defaults={"supplier": row.get("supplier", "")},
                 )
-                if style_created:
-                    created_styles += 1
-                else:
-                    if supplier and getattr(style, "supplier", "") != supplier:
-                        style.supplier = supplier
-                        style.save(update_fields=["supplier"])
-                        updated_styles += 1
 
-                variant, v_created = FrameVariant.objects.get_or_create(
-                    sku=sku,
+                FrameVariant.objects.update_or_create(
+                    sku=row["sku"],
                     defaults={
                         "style": style,
-                        "color": color,
-                        "size": size,
-                        "status": status,
+                        "color": row.get("color", ""),
+                        "size": row.get("size", ""),
+                        "status": row.get("status", "OK"),
+                        "created_at": timezone.now(),
                     },
                 )
-                if v_created:
-                    created_variants += 1
-                else:
-                    changed = False
 
-                    if variant.style_id != style.id:
-                        variant.style = style
-                        changed = True
-                    if color and variant.color != color:
-                        variant.color = color
-                        changed = True
-                    if size and variant.size != size:
-                        variant.size = size
-                        changed = True
-                    if status and variant.status != status:
-                        variant.status = status
-                        changed = True
-
-                    if changed:
-                        variant.save()
-                        updated_variants += 1
-
-        messages.success(
-            request,
-            f"Import done. Styles: +{created_styles} new, {updated_styles} updated. "
-            f"Variants: +{created_variants} new, {updated_variants} updated."
-        )
+        messages.success(request, "Frames imported.")
         return redirect("frames_list")
 
     return render(request, "qc/import_frames.html")
+

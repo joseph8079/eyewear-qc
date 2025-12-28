@@ -1,62 +1,46 @@
 {% extends "qc/base.html" %}
-{% block title %}Frames • Ctrue Quality Tracker{% endblock %}
-
 {% block content %}
-<div class="d-flex align-items-center justify-content-between mb-3">
-  <div>
-    <h1 class="h4 mb-0">Frames</h1>
-    <div class="text-muted">All frame variants</div>
+
+<div class="d-flex justify-content-between mb-3">
+  <h1 class="h4">Frames</h1>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'download_frames_template' %}">CSV Template</a>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'import_frames' %}">Import CSV</a>
+    <a class="btn btn-primary btn-sm" href="{% url 'frame_create' %}">+ Add Frame</a>
   </div>
-  <a class="btn btn-dark btn-sm" href="{% url 'import_frames' %}">Import CSV</a>
 </div>
 
-<div class="card shadow-sm">
-  <div class="card-body">
-    {% if frames %}
-      <div class="table-responsive">
-        <table class="table table-sm align-middle mb-0">
-          <thead>
-            <tr>
-              <th>SKU</th>
-              <th>Style</th>
-              <th>Color</th>
-              <th>Size</th>
-              <th>Status</th>
-              <th class="text-end">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for f in frames %}
-              <tr>
-                <td class="fw-semibold">{{ f.sku }}</td>
-                <td>{{ f.style.style_code }}</td>
-                <td>{{ f.color }}</td>
-                <td>{{ f.size }}</td>
-                <td>
-                  {% if f.status == "OK" %}
-                    <span class="badge text-bg-success">OK</span>
-                  {% elif f.status == "HOLD" %}
-                    <span class="badge text-bg-warning">HOLD</span>
-                  {% elif f.status == "OFF" %}
-                    <span class="badge text-bg-secondary">OFF</span>
-                  {% else %}
-                    <span class="badge text-bg-light">{{ f.status }}</span>
-                  {% endif %}
-                </td>
-                <td class="text-end">
-                  <a class="btn btn-outline-dark btn-sm"
-                     href="{% url 'complaint_create_for_frame' f.pk %}">
-                    Add Complaint
-                  </a>
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    {% else %}
-      <div class="text-muted">No frames found. Import a CSV to get started.</div>
-    {% endif %}
-  </div>
-</div>
+<table class="table table-striped table-sm">
+  <thead>
+    <tr>
+      <th>SKU</th>
+      <th>Style</th>
+      <th>Supplier</th>
+      <th>Color</th>
+      <th>Size</th>
+      <th>Status</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for f in frames %}
+    <tr>
+      <td>{{ f.sku }}</td>
+      <td>{{ f.style.style_code }}</td>
+      <td>{{ f.style.supplier }}</td>
+      <td>{{ f.color }}</td>
+      <td>{{ f.size }}</td>
+      <td>{{ f.status }}</td>
+      <td class="text-end">
+        <a class="btn btn-outline-danger btn-sm" href="{% url 'complaint_create_for_frame' f.pk %}">
+          + Complaint
+        </a>
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="7" class="text-muted">No frames</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
 {% endblock %}

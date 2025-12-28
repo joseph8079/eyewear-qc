@@ -1,55 +1,16 @@
+
 {% extends "qc/base.html" %}
 {% block content %}
 
-<div class="mb-3">
-  <h1 class="h3 mb-0">{% if mode == "create" %}Add Frame{% else %}Edit Frame{% endif %}</h1>
-  <div class="text-muted">Ctrue Quality Tracker</div>
-</div>
+<h1 class="h4 mb-3">Add Frame</h1>
 
-<div class="card shadow-sm">
-  <div class="card-body">
-    <form method="post" class="row g-3">
-      {% csrf_token %}
-
-      <div class="col-md-4">
-        <label class="form-label">Style Code</label>
-        {{ form.style_code }}
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Supplier</label>
-        {{ form.supplier }}
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Status</label>
-        {{ form.status }}
-      </div>
-
-      <div class="col-md-4">
-        <label class="form-label">SKU</label>
-        {{ form.sku }}
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Color</label>
-        {{ form.color }}
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Size</label>
-        {{ form.size }}
-      </div>
-
-      <div class="col-12">
-        <button class="btn btn-primary" type="submit">
-          {% if mode == "create" %}Create Frame{% else %}Save Changes{% endif %}
-        </button>
-        <a class="btn btn-outline-secondary" href="{% url 'frame_list' %}">Cancel</a>
-      </div>
-    </form>
+<form method="post" class="card p-3" style="max-width:720px;">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <div class="mt-3">
+    <button class="btn btn-primary">Save</button>
+    <a class="btn btn-outline-secondary" href="{% url 'frames_list' %}">Cancel</a>
   </div>
-</div>
-
-<script>
-  document.querySelectorAll("input, select, textarea").forEach(el => el.classList.add("form-control"));
-</script>
+</form>
 
 {% endblock %}
-
