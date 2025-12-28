@@ -103,16 +103,6 @@ def complaint_create_for_frame(request, pk: int):
 # -------------------------
 @login_required
 def download_frames_template(request):
-    """
-    Downloads a CSV template for importing frames.
-
-    Columns expected:
-    style_code, supplier, sku, color, size, status
-
-    - style_code: required
-    - sku: required + unique
-    - status: OK / HOLD / OFF (defaults to OK if blank)
-    """
     output = io.StringIO()
     writer = csv.writer(output)
 
