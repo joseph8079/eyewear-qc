@@ -6,7 +6,7 @@
 
     <div class="mb-3">
       <h1 class="h3 mb-0">New Complaint</h1>
-      <div class="text-muted">Log a breakage issue for a specific SKU</div>
+      <div class="text-muted">Log breakage / defects for a SKU</div>
     </div>
 
     <div class="card shadow-sm">
@@ -14,9 +14,15 @@
         <form method="post" enctype="multipart/form-data">
           {% csrf_token %}
 
-          <div class="mb-3">
-            <label class="form-label">Variant</label>
-            {{ form.variant }}
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Store</label>
+              {{ form.store }}
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Variant</label>
+              {{ form.variant }}
+            </div>
           </div>
 
           <div class="row">
@@ -38,12 +44,12 @@
           <div class="mb-3">
             <label class="form-label">Attachments (photos)</label>
             {{ form.attachments }}
-            <div class="form-text">You can upload multiple files.</div>
+            <div class="form-text">You can select multiple files.</div>
           </div>
 
           <div class="d-flex gap-2">
             <button class="btn btn-primary" type="submit">Submit</button>
-            <a class="btn btn-outline-secondary" href="/">Cancel</a>
+            <a class="btn btn-outline-secondary" href="/variants/">Cancel</a>
           </div>
         </form>
       </div>

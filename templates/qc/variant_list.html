@@ -4,30 +4,54 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
     <h1 class="h3 mb-0">Variants</h1>
-    <div class="text-muted">All SKUs / color / size status</div>
+    <div class="text-muted">Search + filter (showing up to 2000)</div>
   </div>
   <a class="btn btn-primary" href="/complaints/new/">+ New Complaint</a>
 </div>
 
+<form class="row g-2 mb-3" method="get" action="/variants/">
+  <div class="col-md-5">
+    <input class="form-control" name="q" value="{{ q }}" placeholder="Search SKU or Style code">
+  </div>
+  <div class="col-md-3">
+    <input class="form-control" name="supplier" value="{{ supplier }}" placeholder="Supplier (contains)">
+  </div>
+  <div class="col-md-2">
+    <select class="form-select" name="status">
+      <option value="">All statuses</option>
+      {% for code,label in status_choices %}
+        <option value="{{ code }}" {% if status == code %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-2 d-grid">
+    <button class="btn btn-outline-dark" type="submit">Filter</button>
+  </div>
+</form>
+
 <div class="card shadow-sm">
   <div class="card-body p-0">
     <div class="table-responsive">
-      <table class="table table-striped table-hover mb-0 align-middle">
+      <table class="table table-hover mb-0 align-middle">
         <thead class="table-light">
           <tr>
             <th>SKU</th>
             <th>Style</th>
+            <th>Supplier</th>
             <th>Color</th>
             <th>Size</th>
             <th>Status</th>
-            <th class="text-end">QC Score</th>
+            <th class="text-end">Complaints (90d)</th>
           </tr>
         </thead>
         <tbody>
           {% for v in variants %}
             <tr>
-              <td class="fw-semibold">{{ v.sku }}</td>
+              <td class="fw-semibold">
+                <a href="/variants/{{ v.id }}/" class="text-decoration-none">{{ v.sku }}</a>
+              </td>
               <td>{{ v.style.style_code }}</td>
+              <td>{{ v.style.supplier_name }}</td>
               <td>{{ v.color }}</td>
               <td>{{ v.size }}</td>
               <td>
@@ -41,14 +65,10 @@
                   <span class="badge text-bg-secondary">Pulled</span>
                 {% endif %}
               </td>
-              <td class="text-end">{{ v.qc_score_cached }}</td>
+              <td class="text-end">{{ v.complaints_90 }}</td>
             </tr>
           {% empty %}
-            <tr>
-              <td colspan="6" class="text-center text-muted py-5">
-                No variants yet. Add a FrameStyle + FrameVariant in Admin.
-              </td>
-            </tr>
+            <tr><td colspan="7" class="text-muted text-center py-5">No variants found</td></tr>
           {% endfor %}
         </tbody>
       </table>

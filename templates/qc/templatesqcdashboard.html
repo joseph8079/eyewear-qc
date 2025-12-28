@@ -1,0 +1,103 @@
+{% extends "qc/base.html" %}
+{% block content %}
+
+<div class="mb-3">
+  <h1 class="h3 mb-0">Dashboard</h1>
+  <div class="text-muted">Last 30 days overview</div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="text-muted">Total Variants</div>
+        <div class="display-6">{{ total_variants }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="text-muted">Complaints (30d)</div>
+        <div class="display-6">{{ total_complaints_30 }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="text-muted">Exports</div>
+        <a class="btn btn-outline-primary mt-2" href="/export/supplier.csv">Download supplier CSV</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-header bg-white fw-semibold">Top breaking SKUs (30d)</div>
+      <div class="card-body p-0">
+        <table class="table mb-0">
+          <thead class="table-light">
+            <tr><th>SKU</th><th>Style</th><th class="text-end">Complaints</th></tr>
+          </thead>
+          <tbody>
+            {% for r in top_variants %}
+              <tr>
+                <td>{{ r.variant__sku }}</td>
+                <td>{{ r.variant__style__style_code }}</td>
+                <td class="text-end">{{ r.c }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3" class="text-muted text-center py-4">No complaints yet</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-3">
+    <div class="card shadow-sm">
+      <div class="card-header bg-white fw-semibold">By failure type</div>
+      <div class="card-body p-0">
+        <table class="table mb-0">
+          <thead class="table-light">
+            <tr><th>Type</th><th class="text-end">Count</th></tr>
+          </thead>
+          <tbody>
+            {% for r in by_failure %}
+              <tr><td>{{ r.failure_type }}</td><td class="text-end">{{ r.c }}</td></tr>
+            {% empty %}
+              <tr><td colspan="2" class="text-muted text-center py-4">No data</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-3">
+    <div class="card shadow-sm">
+      <div class="card-header bg-white fw-semibold">By store</div>
+      <div class="card-body p-0">
+        <table class="table mb-0">
+          <thead class="table-light">
+            <tr><th>Store</th><th class="text-end">Count</th></tr>
+          </thead>
+          <tbody>
+            {% for r in by_store %}
+              <tr><td>{{ r.store__name }}</td><td class="text-end">{{ r.c }}</td></tr>
+            {% empty %}
+              <tr><td colspan="2" class="text-muted text-center py-4">No data</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}

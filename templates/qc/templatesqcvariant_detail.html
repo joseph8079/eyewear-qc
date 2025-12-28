@@ -1,0 +1,73 @@
+{% extends "qc/base.html" %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h1 class="h3 mb-1">{{ variant.sku }}</h1>
+    <div class="text-muted">
+      Style: <span class="fw-semibold">{{ variant.style.style_code }}</span> ·
+      Supplier: {{ variant.style.supplier_name }} ·
+      Color: {{ variant.color }} · Size: {{ variant.size }}
+    </div>
+  </div>
+
+  <div class="d-flex gap-2">
+    <a class="btn btn-primary" href="/complaints/new/{{ variant.id }}/">+ Complaint</a>
+    <div class="dropdown">
+      <button class="btn btn-outline-dark dropdown-toggle" data-bs-toggle="dropdown">Set Status</button>
+      <ul class="dropdown-menu dropdown-menu-end">
+        <li><a class="dropdown-item" href="/variants/{{ variant.id }}/status/APPROVED/">Approved</a></li>
+        <li><a class="dropdown-item" href="/variants/{{ variant.id }}/status/WATCH/">Watch</a></li>
+        <li><a class="dropdown-item" href="/variants/{{ variant.id }}/status/HOLD/">Hold</a></li>
+        <li><a class="dropdown-item" href="/variants/{{ variant.id }}/status/PULLED/">Pulled</a></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="mb-3">
+  {% if variant.status == "APPROVED" %}
+    <span class="badge text-bg-success">Approved</span>
+  {% elif variant.status == "WATCH" %}
+    <span class="badge text-bg-warning">Watch</span>
+  {% elif variant.status == "HOLD" %}
+    <span class="badge text-bg-danger">Hold</span>
+  {% else %}
+    <span class="badge text-bg-secondary">Pulled</span>
+  {% endif %}
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header bg-white fw-semibold">Complaints</div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Date</th>
+            <th>Store</th>
+            <th>Failure</th>
+            <th>Severity</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in complaints %}
+            <tr>
+              <td class="text-nowrap">{{ c.created_at|date:"Y-m-d H:i" }}</td>
+              <td>{{ c.store.name }}</td>
+              <td>{{ c.failure_type }}</td>
+              <td>{{ c.severity }}</td>
+              <td class="text-muted">{{ c.notes|default:"" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="text-muted text-center py-5">No complaints yet</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
