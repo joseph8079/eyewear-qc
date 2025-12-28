@@ -1,22 +1,36 @@
-<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Eyewear QC</title>
-  </head>
-  <body>
-    <h1>Eyewear QC ✅</h1>
+{% extends "qc/base.html" %}
 
-    <ul>
-      <li>Styles: {{ stats.styles }}</li>
-      <li>Variants: {{ stats.variants }}</li>
-      <li>Complaints: {{ stats.complaints }}</li>
-    </ul>
+{% block content %}
+  <div class="p-4 bg-white rounded shadow-sm">
+    <h1 class="h4 mb-3">Eyewear QC ✅</h1>
 
-    <p>
-      <a href="/frames/">Frames</a> |
-      <a href="/complaints/">Complaints</a> |
-      <a href="/import/frames/">Import Frames</a>
-    </p>
-  </body>
-</html>
+    <div class="row g-3">
+      <div class="col-md-4">
+        <div class="border rounded p-3">
+          <div class="text-muted small">Styles</div>
+          <div class="fs-3 fw-semibold">{{ stats.styles }}</div>
+        </div>
+      </div>
+
+      <div class="col-md-4">
+        <div class="border rounded p-3">
+          <div class="text-muted small">Variants</div>
+          <div class="fs-3 fw-semibold">{{ stats.variants }}</div>
+        </div>
+      </div>
+
+      <div class="col-md-4">
+        <div class="border rounded p-3">
+          <div class="text-muted small">Complaints</div>
+          <div class="fs-3 fw-semibold">{{ stats.complaints }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-4 d-flex gap-2 flex-wrap">
+      <a class="btn btn-dark btn-sm" href="{% url 'frames_list' %}">Frames</a>
+      <a class="btn btn-dark btn-sm" href="{% url 'complaints_list' %}">Complaints</a>
+      <a class="btn btn-outline-dark btn-sm" href="{% url 'import_frames' %}">Import Frames</a>
+    </div>
+  </div>
+{% endblock %}
