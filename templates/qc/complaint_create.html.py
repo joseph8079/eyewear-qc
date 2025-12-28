@@ -1,0 +1,11 @@
+{% extends "qc/base.html" %}
+
+{% block content %}
+<h1>New Complaint</h1>
+
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">Submit</button>
+</form>
+{% endblock %}
