@@ -1,22 +1,32 @@
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Import Frames</title>
-</head>
-<body>
-  <h1>Import Frames (CSV)</h1>
+{% extends "qc/base.html" %}
+{% block title %}Import Frames • Ctrue Quality Tracker{% endblock %}
 
-  <p>
-    <a href="{% url 'download_frames_template' %}">Download CSV Template</a>
-    &nbsp; | &nbsp;
-    <a href="{% url 'frames_list' %}">Back to Frames</a>
-  </p>
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h1 class="h4 mb-0">Import Frames</h1>
+    <div class="text-muted">Upload a CSV to create/update styles + variants</div>
+  </div>
+  <a class="btn btn-outline-dark btn-sm" href="{% url 'download_frames_template' %}">Download Template</a>
+</div>
 
-  <form method="post" enctype="multipart/form-data">
-    {% csrf_token %}
-    <input type="file" name="file" accept=".csv" required>
-    <button type="submit">Upload</button>
-  </form>
-</body>
-</html>
+<div class="card shadow-sm">
+  <div class="card-body">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label">CSV File</label>
+        <input type="file" class="form-control" name="file" accept=".csv" required>
+        <div class="form-text">
+          Required headers: <code>style_code</code>, <code>sku</code>. Optional: supplier, color, size, status
+        </div>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button class="btn btn-dark" type="submit">Upload & Import</button>
+        <a class="btn btn-outline-dark" href="{% url 'frames_list' %}">Back to Frames</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

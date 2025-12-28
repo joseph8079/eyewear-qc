@@ -1,35 +1,46 @@
 {% extends "qc/base.html" %}
-{% block content %}
+{% block title %}Complaints • Ctrue Quality Tracker{% endblock %}
 
+{% block content %}
 <div class="mb-3">
-  <h1 class="h3 mb-0">Complaints</h1>
-  <div class="text-muted">All stores</div>
+  <h1 class="h4 mb-0">Complaints</h1>
+  <div class="text-muted">Most recent first</div>
 </div>
 
 <div class="card shadow-sm">
-  <div class="card-body p-0">
-    <div class="table-responsive">
-      <table class="table table-hover mb-0">
-        <thead class="table-light">
-          <tr><th>Date</th><th>Frame</th><th>Store</th><th>Type</th><th>Severity</th><th>Notes</th></tr>
-        </thead>
-        <tbody>
-        {% for c in complaints %}
-          <tr>
-            <td>{{ c.created_at|date:"Y-m-d" }}</td>
-            <td><a href="{% url 'frame_detail' c.variant.id %}">{{ c.variant.sku }}</a></td>
-            <td>{{ c.store }}</td>
-            <td>{{ c.get_failure_type_display }}</td>
-            <td>{{ c.get_severity_display }}</td>
-            <td>{{ c.notes|default:"-" }}</td>
-          </tr>
-        {% empty %}
-          <tr><td colspan="6" class="text-muted p-3">No complaints yet.</td></tr>
-        {% endfor %}
-        </tbody>
-      </table>
-    </div>
+  <div class="card-body">
+    {% if complaints %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Created</th>
+              <th>SKU</th>
+              <th>Style</th>
+              <th>Store</th>
+              <th>Failure</th>
+              <th>Severity</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in complaints %}
+              <tr>
+                <td class="text-nowrap">{{ c.created_at|date:"Y-m-d H:i" }}</td>
+                <td class="fw-semibold">{{ c.variant.sku }}</td>
+                <td>{{ c.variant.style.style_code }}</td>
+                <td>{{ c.store.name|default:"—" }}</td>
+                <td>{{ c.get_failure_type_display }}</td>
+                <td>{{ c.get_severity_display }}</td>
+                <td class="text-truncate" style="max-width: 420px;">{{ c.notes|default:"" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="text-muted">No complaints yet.</div>
+    {% endif %}
   </div>
 </div>
-
 {% endblock %}
