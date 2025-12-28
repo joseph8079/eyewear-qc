@@ -1,33 +1,27 @@
 {% extends "qc/base.html" %}
 {% block content %}
 
-<div class="mb-3">
-  <h1 class="h3 mb-0">Dashboard</h1>
-  <div class="text-muted">Last 30 days overview</div>
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h1 class="h3 mb-0">Dashboard</h1>
+    <div class="text-muted">Ctrue Quality Tracker</div>
+  </div>
 </div>
 
 <div class="row g-3 mb-4">
-  <div class="col-md-4">
+  <div class="col-md-6">
     <div class="card shadow-sm">
       <div class="card-body">
-        <div class="text-muted">Total Variants</div>
-        <div class="display-6">{{ total_variants }}</div>
+        <div class="text-muted">Total Frames</div>
+        <div class="display-6">{{ total_frames }}</div>
       </div>
     </div>
   </div>
-  <div class="col-md-4">
+  <div class="col-md-6">
     <div class="card shadow-sm">
       <div class="card-body">
-        <div class="text-muted">Complaints (30d)</div>
-        <div class="display-6">{{ total_complaints_30 }}</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-4">
-    <div class="card shadow-sm">
-      <div class="card-body">
-        <div class="text-muted">Exports</div>
-        <a class="btn btn-outline-primary mt-2" href="/export/supplier.csv">Download supplier CSV</a>
+        <div class="text-muted">Total Complaints</div>
+        <div class="display-6">{{ total_complaints }}</div>
       </div>
     </div>
   </div>
@@ -36,68 +30,60 @@
 <div class="row g-3">
   <div class="col-lg-6">
     <div class="card shadow-sm">
-      <div class="card-header bg-white fw-semibold">Top breaking SKUs (30d)</div>
+      <div class="card-header bg-white fw-semibold">Latest Complaints</div>
       <div class="card-body p-0">
-        <table class="table mb-0">
-          <thead class="table-light">
-            <tr><th>SKU</th><th>Style</th><th class="text-end">Complaints</th></tr>
-          </thead>
-          <tbody>
-            {% for r in top_variants %}
+        <div class="table-responsive">
+          <table class="table mb-0 table-hover">
+            <thead class="table-light">
               <tr>
-                <td>{{ r.variant__sku }}</td>
-                <td>{{ r.variant__style__style_code }}</td>
-                <td class="text-end">{{ r.c }}</td>
+                <th>Frame</th><th>Store</th><th>Type</th><th>Severity</th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for c in latest_complaints %}
+              <tr>
+                <td><a href="{% url 'frame_detail' c.variant.id %}">{{ c.variant.sku }}</a></td>
+                <td>{{ c.store }}</td>
+                <td>{{ c.get_failure_type_display }}</td>
+                <td>{{ c.get_severity_display }}</td>
               </tr>
             {% empty %}
-              <tr><td colspan="3" class="text-muted text-center py-4">No complaints yet</td></tr>
+              <tr><td colspan="4" class="text-muted p-3">No complaints yet.</td></tr>
             {% endfor %}
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="col-lg-3">
+  <div class="col-lg-6">
     <div class="card shadow-sm">
-      <div class="card-header bg-white fw-semibold">By failure type</div>
+      <div class="card-header bg-white fw-semibold">Worst QC Score (cached)</div>
       <div class="card-body p-0">
-        <table class="table mb-0">
-          <thead class="table-light">
-            <tr><th>Type</th><th class="text-end">Count</th></tr>
-          </thead>
-          <tbody>
-            {% for r in by_failure %}
-              <tr><td>{{ r.failure_type }}</td><td class="text-end">{{ r.c }}</td></tr>
+        <div class="table-responsive">
+          <table class="table mb-0 table-hover">
+            <thead class="table-light">
+              <tr><th>SKU</th><th>Style</th><th>Status</th><th>QC</th></tr>
+            </thead>
+            <tbody>
+            {% for f in worst_frames %}
+              <tr>
+                <td><a href="{% url 'frame_detail' f.id %}">{{ f.sku }}</a></td>
+                <td>{{ f.style.style_code }}</td>
+                <td>{{ f.status }}</td>
+                <td>{{ f.qc_score_cached }}</td>
+              </tr>
             {% empty %}
-              <tr><td colspan="2" class="text-muted text-center py-4">No data</td></tr>
+              <tr><td colspan="4" class="text-muted p-3">No frames yet.</td></tr>
             {% endfor %}
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
-
-  <div class="col-lg-3">
-    <div class="card shadow-sm">
-      <div class="card-header bg-white fw-semibold">By store</div>
-      <div class="card-body p-0">
-        <table class="table mb-0">
-          <thead class="table-light">
-            <tr><th>Store</th><th class="text-end">Count</th></tr>
-          </thead>
-          <tbody>
-            {% for r in by_store %}
-              <tr><td>{{ r.store__name }}</td><td class="text-end">{{ r.c }}</td></tr>
-            {% empty %}
-              <tr><td colspan="2" class="text-muted text-center py-4">No data</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
 </div>
 
 {% endblock %}
+

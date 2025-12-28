@@ -1,0 +1,55 @@
+{% extends "qc/base.html" %}
+{% block content %}
+
+<div class="mb-3">
+  <h1 class="h3 mb-0">{% if mode == "create" %}Add Frame{% else %}Edit Frame{% endif %}</h1>
+  <div class="text-muted">Ctrue Quality Tracker</div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <form method="post" class="row g-3">
+      {% csrf_token %}
+
+      <div class="col-md-4">
+        <label class="form-label">Style Code</label>
+        {{ form.style_code }}
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Supplier</label>
+        {{ form.supplier }}
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Status</label>
+        {{ form.status }}
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">SKU</label>
+        {{ form.sku }}
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Color</label>
+        {{ form.color }}
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Size</label>
+        {{ form.size }}
+      </div>
+
+      <div class="col-12">
+        <button class="btn btn-primary" type="submit">
+          {% if mode == "create" %}Create Frame{% else %}Save Changes{% endif %}
+        </button>
+        <a class="btn btn-outline-secondary" href="{% url 'frame_list' %}">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll("input, select, textarea").forEach(el => el.classList.add("form-control"));
+</script>
+
+{% endblock %}
+

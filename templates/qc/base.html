@@ -3,30 +3,43 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Eyewear QC</title>
+  <title>Ctrue Quality Tracker</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="bg-light">
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
   <div class="container">
-    <a class="navbar-brand fw-semibold" href="/">Eyewear QC</a>
+    <a class="navbar-brand fw-semibold" href="/">Ctrue Quality Tracker</a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div id="nav" class="collapse navbar-collapse">
+      <ul class="navbar-nav me-auto">
+        <li class="nav-item"><a class="nav-link" href="/">Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link" href="/frames/">Frames</a></li>
+        <li class="nav-item"><a class="nav-link" href="/complaints/">Complaints</a></li>
+        <li class="nav-item"><a class="nav-link" href="/import/frames/">Import CSV</a></li>
+      </ul>
 
-    <div class="navbar-nav gap-1">
-      <a class="nav-link" href="/">Dashboard</a>
-      <a class="nav-link" href="/variants/">Variants</a>
-      <a class="nav-link" href="/complaints/">Complaints</a>
-      <a class="nav-link" href="/complaints/new/">New Complaint</a>
-      <a class="nav-link" href="/admin/">Admin</a>
+      <div class="d-flex gap-2">
+        <a class="btn btn-outline-light btn-sm" href="/admin/">Admin</a>
+        <a class="btn btn-outline-light btn-sm" href="/accounts/logout/">Logout</a>
+      </div>
     </div>
   </div>
 </nav>
 
-<main class="container py-4">
+<div class="container py-4">
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }} mb-3">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
   {% block content %}{% endblock %}
-</main>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
-<a class="nav-link" href="/import/frames/">Import CSV</a>

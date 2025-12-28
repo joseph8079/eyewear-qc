@@ -1,61 +1,31 @@
 {% extends "qc/base.html" %}
 {% block content %}
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <div>
-    <h1 class="h3 mb-0">Complaints</h1>
-    <div class="text-muted">Filter by store/failure or search SKU</div>
-  </div>
-  <a class="btn btn-primary" href="/complaints/new/">+ New Complaint</a>
+<div class="mb-3">
+  <h1 class="h3 mb-0">Complaints</h1>
+  <div class="text-muted">All stores</div>
 </div>
-
-<form class="row g-2 mb-3" method="get" action="/complaints/">
-  <div class="col-md-4">
-    <input class="form-control" name="q" value="{{ q }}" placeholder="Search SKU or Style">
-  </div>
-  <div class="col-md-4">
-    <input class="form-control" name="failure" value="{{ failure_type }}" placeholder="Failure type contains">
-  </div>
-  <div class="col-md-3">
-    <select class="form-select" name="store">
-      <option value="">All stores</option>
-      {% for s in stores %}
-        <option value="{{ s.id }}" {% if store_id == s.id|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div class="col-md-1 d-grid">
-    <button class="btn btn-outline-dark" type="submit">Go</button>
-  </div>
-</form>
 
 <div class="card shadow-sm">
   <div class="card-body p-0">
     <div class="table-responsive">
-      <table class="table table-hover mb-0 align-middle">
+      <table class="table table-hover mb-0">
         <thead class="table-light">
-          <tr>
-            <th>Date</th>
-            <th>Store</th>
-            <th>SKU</th>
-            <th>Style</th>
-            <th>Failure</th>
-            <th>Severity</th>
-          </tr>
+          <tr><th>Date</th><th>Frame</th><th>Store</th><th>Type</th><th>Severity</th><th>Notes</th></tr>
         </thead>
         <tbody>
-          {% for c in complaints %}
-            <tr>
-              <td class="text-nowrap">{{ c.created_at|date:"Y-m-d H:i" }}</td>
-              <td>{{ c.store.name }}</td>
-              <td class="fw-semibold"><a class="text-decoration-none" href="/variants/{{ c.variant.id }}/">{{ c.variant.sku }}</a></td>
-              <td>{{ c.variant.style.style_code }}</td>
-              <td>{{ c.failure_type }}</td>
-              <td>{{ c.severity }}</td>
-            </tr>
-          {% empty %}
-            <tr><td colspan="6" class="text-muted text-center py-5">No complaints found</td></tr>
-          {% endfor %}
+        {% for c in complaints %}
+          <tr>
+            <td>{{ c.created_at|date:"Y-m-d" }}</td>
+            <td><a href="{% url 'frame_detail' c.variant.id %}">{{ c.variant.sku }}</a></td>
+            <td>{{ c.store }}</td>
+            <td>{{ c.get_failure_type_display }}</td>
+            <td>{{ c.get_severity_display }}</td>
+            <td>{{ c.notes|default:"-" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="text-muted p-3">No complaints yet.</td></tr>
+        {% endfor %}
         </tbody>
       </table>
     </div>
@@ -63,4 +33,3 @@
 </div>
 
 {% endblock %}
-

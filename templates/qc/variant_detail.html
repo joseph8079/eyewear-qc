@@ -1,68 +1,66 @@
 {% extends "qc/base.html" %}
 {% block content %}
 
-<div class="d-flex justify-content-between align-items-start mb-3">
+<div class="d-flex justify-content-between align-items-center mb-3">
   <div>
-    <h1 class="h3 mb-1">{{ variant.sku }}</h1>
+    <h1 class="h3 mb-0">Frame: {{ frame.sku }}</h1>
     <div class="text-muted">
-      Style: <span class="fw-semibold">{{ variant.style.style_code }}</span> ·
-      Supplier: {{ variant.style.supplier_name }} ·
-      Color: {{ variant.color }} · Size: {{ variant.size }}
+      Style: {{ frame.style.style_code }} • Supplier: {{ frame.style.supplier }} • Status: {{ frame.status }}
     </div>
   </div>
-
   <div class="d-flex gap-2">
-    <a class="btn btn-primary" href="/complaints/new/{{ variant.id }}/">+ Complaint</a>
-    <div class="dropdown">
-      <button class="btn btn-outline-dark dropdown-toggle" data-bs-toggle="dropdown">Set Status</button>
-      <ul class="dropdown-menu dropdown-menu-end">
-        <li><a class="dropdown-item" href="/variants/{{ variant.id }}/status/APPROVED/">Approved</a></li>
-        <li><a class="dropdown-item" href="/variants/{{ variant.id }}/status/WATCH/">Watch</a></li>
-        <li><a class="dropdown-item" href="/variants/{{ variant.id }}/status/HOLD/">Hold</a></li>
-        <li><a class="dropdown-item" href="/variants/{{ variant.id }}/status/PULLED/">Pulled</a></li>
-      </ul>
-    </div>
+    <a class="btn btn-outline-primary" href="{% url 'frame_edit' frame.id %}">Edit Frame</a>
+    <a class="btn btn-primary" href="{% url 'complaint_create_for_frame' frame.id %}">Add Complaint</a>
   </div>
 </div>
 
-<div class="mb-3">
-  {% if variant.status == "APPROVED" %}
-    <span class="badge text-bg-success">Approved</span>
-  {% elif variant.status == "WATCH" %}
-    <span class="badge text-bg-warning">Watch</span>
-  {% elif variant.status == "HOLD" %}
-    <span class="badge text-bg-danger">Hold</span>
-  {% else %}
-    <span class="badge text-bg-secondary">Pulled</span>
-  {% endif %}
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="text-muted">Color</div>
+        <div class="fs-5">{{ frame.color }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="text-muted">Size</div>
+        <div class="fs-5">{{ frame.size }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="text-muted">QC Score (cached)</div>
+        <div class="fs-5">{{ frame.qc_score_cached }}</div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="card shadow-sm">
   <div class="card-header bg-white fw-semibold">Complaints</div>
   <div class="card-body p-0">
     <div class="table-responsive">
-      <table class="table mb-0 align-middle">
+      <table class="table table-hover mb-0">
         <thead class="table-light">
-          <tr>
-            <th>Date</th>
-            <th>Store</th>
-            <th>Failure</th>
-            <th>Severity</th>
-            <th>Notes</th>
-          </tr>
+          <tr><th>Date</th><th>Store</th><th>Type</th><th>Severity</th><th>Notes</th></tr>
         </thead>
         <tbody>
-          {% for c in complaints %}
-            <tr>
-              <td class="text-nowrap">{{ c.created_at|date:"Y-m-d H:i" }}</td>
-              <td>{{ c.store.name }}</td>
-              <td>{{ c.failure_type }}</td>
-              <td>{{ c.severity }}</td>
-              <td class="text-muted">{{ c.notes|default:"" }}</td>
-            </tr>
-          {% empty %}
-            <tr><td colspan="5" class="text-muted text-center py-5">No complaints yet</td></tr>
-          {% endfor %}
+        {% for c in complaints %}
+          <tr>
+            <td>{{ c.created_at|date:"Y-m-d" }}</td>
+            <td>{{ c.store }}</td>
+            <td>{{ c.get_failure_type_display }}</td>
+            <td>{{ c.get_severity_display }}</td>
+            <td>{{ c.notes|default:"-" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="text-muted p-3">No complaints yet.</td></tr>
+        {% endfor %}
         </tbody>
       </table>
     </div>
@@ -70,4 +68,3 @@
 </div>
 
 {% endblock %}
-

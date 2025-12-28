@@ -3,16 +3,14 @@ from . import views
 
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
-    path("variants/", views.variant_list, name="variant_list"),
-    path("variants/<int:variant_id>/", views.variant_detail, name="variant_detail"),
-    path("variants/<int:variant_id>/status/<str:status>/", views.variant_set_status, name="variant_set_status"),
 
+    path("frames/", views.frame_list, name="frame_list"),
+    path("frames/new/", views.frame_create, name="frame_create"),
+    path("frames/<int:pk>/", views.frame_detail, name="frame_detail"),
+    path("frames/<int:pk>/edit/", views.frame_edit, name="frame_edit"),
+
+    path("frames/<int:pk>/complaints/new/", views.complaint_create_for_frame, name="complaint_create_for_frame"),
     path("complaints/", views.complaints_list, name="complaints_list"),
-    path("complaints/new/", views.complaint_create, name="complaint_create"),
-    path("complaints/new/<int:variant_id>/", views.complaint_create, name="complaint_create_for_variant"),
 
-    path("export/supplier.csv", views.supplier_export_csv, name="supplier_export_csv"),
     path("import/frames/", views.import_frames, name="import_frames"),
-
 ]
-

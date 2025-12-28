@@ -1,0 +1,41 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  body.login { background: #f8f9fa; }
+  .login #container { max-width: 460px; margin-top: 40px; }
+  .login #header { background: #212529; }
+  .login #header h1 a { color: #fff !important; font-weight: 600; }
+  .login .submit-row input { background: #212529; border: none; }
+</style>
+{% endblock %}
+
+{% block branding %}
+<h1 id="site-name"><a href="{% url 'admin:index' %}">Ctrue Quality Tracker Admin</a></h1>
+{% endblock %}
+
+{% block content %}
+<div class="module">
+  <h2 style="margin-bottom:10px;">{% trans "Sign in" %}</h2>
+  {% if form.errors %}
+    <p class="errornote">{% trans "Please correct the error below." %}</p>
+  {% endif %}
+  <form action="{{ app_path }}" method="post" id="login-form">{% csrf_token %}
+    <div class="form-row">
+      {{ form.username.errors }}
+      <label for="id_username">{% trans 'Username:' %}</label>
+      {{ form.username }}
+    </div>
+    <div class="form-row">
+      {{ form.password.errors }}
+      <label for="id_password">{% trans 'Password:' %}</label>
+      {{ form.password }}
+    </div>
+    <div class="submit-row">
+      <input type="submit" value="{% trans 'Log in' %}">
+    </div>
+  </form>
+</div>
+{% endblock %}

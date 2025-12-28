@@ -2,33 +2,20 @@
 {% block content %}
 
 <div class="mb-3">
-  <h1 class="h3 mb-0">Bulk Upload Frames (CSV)</h1>
-  <div class="text-muted">Creates/updates styles + variants. Safe to re-upload.</div>
+  <h1 class="h3 mb-0">Import Frames (CSV)</h1>
+  <div class="text-muted">Required columns: style_code, supplier_name, sku, color, size, status</div>
 </div>
-
-{% if messages %}
-  {% for message in messages %}
-    <div class="alert alert-{{ message.tags }} mb-2">{{ message }}</div>
-  {% endfor %}
-{% endif %}
 
 <div class="card shadow-sm">
   <div class="card-body">
     <form method="post" enctype="multipart/form-data" class="row g-3">
       {% csrf_token %}
       <div class="col-12">
-        <label class="form-label">CSV file</label>
-        <input type="file" name="csv_file" accept=".csv" class="form-control" required>
+        <input class="form-control" type="file" name="csv_file" accept=".csv" required>
       </div>
-
-      <div class="col-12">
-        <div class="small text-muted mb-2">Required columns:</div>
-        <code>style_code,supplier_name,sku,color,size,status</code>
-      </div>
-
-      <div class="col-12">
+      <div class="col-12 d-flex gap-2">
         <button class="btn btn-primary" type="submit">Upload & Import</button>
-        <a class="btn btn-outline-secondary" href="/">Back</a>
+        <a class="btn btn-outline-secondary" href="{% url 'frame_list' %}">Back</a>
       </div>
     </form>
   </div>
