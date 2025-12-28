@@ -188,3 +188,27 @@ def supplier_export_csv(request):
     resp = HttpResponse(out.getvalue(), content_type="text/csv")
     resp["Content-Disposition"] = 'attachment; filename="supplier_export.csv"'
     return resp
+from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib import messages
+
+from .importers import import_frames_csv
+
+@staff_member_required
+def import_frames(request):
+    if request.method == "POST" and request.FILES.get("csv_file"):
+        res = import_frames_csv(request.FILES["csv_file"])
+        if res.errors:
+            for e in res.errors[:50]:
+                messages.error(request, e)
+            if len(res.errors) > 50:
+                messages.error(request, f"...and {len(res.errors)-50} more errors")
+        else:
+            messages.success(
+                request,
+                f"Import complete: styles created={res.created_styles}, "
+                f"variants created={res.created_variants}, variants updated={res.updated_variants}"
+            )
+        return redirect("import_frames")
+
+    return render(request, "qc/import_frames.html")
+

@@ -12,4 +12,7 @@ urlpatterns = [
     path("complaints/new/<int:variant_id>/", views.complaint_create, name="complaint_create_for_variant"),
 
     path("export/supplier.csv", views.supplier_export_csv, name="supplier_export_csv"),
+    path("import/frames/", views.import_frames, name="import_frames"),
+
 ]
+
