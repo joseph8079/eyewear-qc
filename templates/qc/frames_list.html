@@ -1,63 +1,34 @@
-{% extends "qc/base.html" %}
-{% block content %}
+<!doctype html>
+<html>
+<head><title>Frames</title></head>
+<body>
+  <h1>Frames</h1>
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <div>
-    <h1 class="h3 mb-0">Frames</h1>
-    <div class="text-muted">Search by SKU, style, color, size</div>
-  </div>
-  <a class="btn btn-primary" href="{% url 'frame_create' %}">Add Frame</a>
-</div>
+  <table border="1" cellpadding="6">
+    <tr>
+      <th>Style Code</th>
+      <th>Supplier</th>
+      <th>SKU</th>
+      <th>Color</th>
+      <th>Size</th>
+      <th>Status</th>
+      <th>Created</th>
+    </tr>
 
-<form class="row g-2 mb-3">
-  <div class="col-md-6">
-    <input class="form-control" name="q" value="{{ q }}" placeholder="Search SKU / Style / Color / Size">
-  </div>
-  <div class="col-md-3">
-    <select class="form-select" name="status">
-      <option value="">All statuses</option>
-      <option value="APPROVED" {% if status == "APPROVED" %}selected{% endif %}>APPROVED</option>
-      <option value="WATCH" {% if status == "WATCH" %}selected{% endif %}>WATCH</option>
-      <option value="HOLD" {% if status == "HOLD" %}selected{% endif %}>HOLD</option>
-      <option value="PULLED" {% if status == "PULLED" %}selected{% endif %}>PULLED</option>
-    </select>
-  </div>
-  <div class="col-md-3 d-grid">
-    <button class="btn btn-dark" type="submit">Filter</button>
-  </div>
-</form>
+    {% for f in frames %}
+      <tr>
+        <td>{{ f.style.style_code }}</td>
+        <td>{{ f.style.supplier }}</td>
+        <td>{{ f.sku }}</td>
+        <td>{{ f.color }}</td>
+        <td>{{ f.size }}</td>
+        <td>{{ f.status }}</td>
+        <td>{{ f.created_at }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="7">No frames yet.</td></tr>
+    {% endfor %}
+  </table>
+</body>
+</html>
 
-<div class="card shadow-sm">
-  <div class="card-body p-0">
-    <div class="table-responsive">
-      <table class="table table-hover mb-0">
-        <thead class="table-light">
-          <tr>
-            <th>SKU</th>
-            <th>Style</th>
-            <th>Supplier</th>
-            <th>Color</th>
-            <th>Size</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-        {% for f in frames %}
-          <tr>
-            <td><a href="{% url 'frame_detail' f.id %}">{{ f.sku }}</a></td>
-            <td>{{ f.style.style_code }}</td>
-            <td>{{ f.style.supplier }}</td>
-            <td>{{ f.color }}</td>
-            <td>{{ f.size }}</td>
-            <td><span class="badge bg-secondary">{{ f.status }}</span></td>
-          </tr>
-        {% empty %}
-          <tr><td colspan="6" class="text-muted p-3">No frames found.</td></tr>
-        {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
-{% endblock %}

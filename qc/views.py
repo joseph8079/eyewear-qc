@@ -30,18 +30,19 @@ def home(request):
     return render(request, "qc/home.html", {"stats": stats})
 
 
-# -------------------------
-# FRAMES LIST
-# -------------------------
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render
+from .models import FrameVariant
+
 @login_required
 def frames_list(request):
-    q = (request.GET.get("q") or "").strip()
-    qs = FrameVariant.objects.select_related("style").order_by("-created_at")
+    qs = (
+        FrameVariant.objects
+        .select_related("style")
+        .order_by("-created_at")
+    )
+    return render(request, "qc/frames_list.html", {"frames": qs})
 
-    if q:
-        qs = qs.filter(sku__icontains=q) | qs.filter(style__style_code__icontains=q)
-
-    return render(request, "qc/frames_list.html", {"frames": qs, "q": q})
 
 
 # -------------------------
