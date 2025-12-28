@@ -1,20 +1,22 @@
-{% extends "qc/base.html" %}
-{% block content %}
-<h2>Import Frames (CSV)</h2>
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Import Frames</title>
+</head>
+<body>
+  <h1>Import Frames (CSV)</h1>
 
-<div style="margin-bottom: 16px;">
-  <a class="btn" href="{% url 'download_frames_template' %}">Download CSV Template</a>
-</div>
+  <p>
+    <a href="{% url 'download_frames_template' %}">Download CSV Template</a>
+    &nbsp; | &nbsp;
+    <a href="{% url 'frames_list' %}">Back to Frames</a>
+  </p>
 
-<form method="post" enctype="multipart/form-data" style="max-width:600px;">
-  {% csrf_token %}
-  <label><b>Upload CSV file:</b></label><br><br>
-  <input type="file" name="file" accept=".csv" required>
-  <br><br>
-  <button class="btn" type="submit">Import</button>
-</form>
-
-<p style="margin-top:16px; color:#666;">
-  Required columns: style_code, supplier, sku, color, size, status
-</p>
-{% endblock %}
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <input type="file" name="file" accept=".csv" required>
+    <button type="submit">Upload</button>
+  </form>
+</body>
+</html>

@@ -1,34 +1,50 @@
 <!doctype html>
 <html>
-<head><title>Frames</title></head>
+<head>
+  <meta charset="utf-8">
+  <title>Frames</title>
+</head>
 <body>
   <h1>Frames</h1>
 
-  <table border="1" cellpadding="6">
+  <p>
+    <a href="{% url 'import_frames' %}">Upload Frames CSV</a>
+    &nbsp; | &nbsp;
+    <a href="{% url 'download_frames_template' %}">Download CSV Template</a>
+    &nbsp; | &nbsp;
+    <a href="{% url 'complaints_list' %}">View Complaints</a>
+  </p>
+
+  <table border="1" cellpadding="6" cellspacing="0">
     <tr>
-      <th>Style Code</th>
+      <th>Style</th>
       <th>Supplier</th>
       <th>SKU</th>
       <th>Color</th>
       <th>Size</th>
       <th>Status</th>
+      <th>QC Score</th>
       <th>Created</th>
+      <th></th>
     </tr>
 
-    {% for f in frames %}
+    {% for v in frames %}
       <tr>
-        <td>{{ f.style.style_code }}</td>
-        <td>{{ f.style.supplier }}</td>
-        <td>{{ f.sku }}</td>
-        <td>{{ f.color }}</td>
-        <td>{{ f.size }}</td>
-        <td>{{ f.status }}</td>
-        <td>{{ f.created_at }}</td>
+        <td>{{ v.style.style_code }}</td>
+        <td>{{ v.style.supplier }}</td>
+        <td>{{ v.sku }}</td>
+        <td>{{ v.color }}</td>
+        <td>{{ v.size }}</td>
+        <td>{{ v.status }}</td>
+        <td>{{ v.qc_score_cached }}</td>
+        <td>{{ v.created_at }}</td>
+        <td>
+          <a href="{% url 'complaint_create_for_frame' v.id %}">Add Complaint</a>
+        </td>
       </tr>
     {% empty %}
-      <tr><td colspan="7">No frames yet.</td></tr>
+      <tr><td colspan="9">No frames found.</td></tr>
     {% endfor %}
   </table>
 </body>
 </html>
-

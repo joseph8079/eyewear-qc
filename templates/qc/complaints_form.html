@@ -1,12 +1,60 @@
-{% extends "base.html" %}
-{% block content %}
-  <h1>New Complaint for {{ variant.style.style_code }} ({{ variant.sku }})</h1>
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>New Complaint</title>
+</head>
+<body>
+  <h1>New Complaint for {{ variant.sku }}</h1>
 
-  <form method="post" enctype="multipart/form-data">
+  <form method="post">
     {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit">Save Complaint</button>
+
+    <label>Store</label>
+    <select name="store">
+      <option value="">(None)</option>
+      {% for s in stores %}
+        <option value="{{ s.id }}">{{ s.name }}</option>
+      {% endfor %}
+    </select>
+
+    <br><br>
+
+    <label>Failure Type</label>
+    <select name="failure_type">
+      {% if failure_choices %}
+        {% for code,label in failure_choices %}
+          <option value="{{ code }}">{{ label }}</option>
+        {% endfor %}
+      {% else %}
+        <option value="OTHER">Other</option>
+      {% endif %}
+    </select>
+
+    <br><br>
+
+    <label>Severity</label>
+    <select name="severity">
+      {% if severity_choices %}
+        {% for code,label in severity_choices %}
+          <option value="{{ code }}">{{ label }}</option>
+        {% endfor %}
+      {% else %}
+        <option value="LOW">Low</option>
+        <option value="MED">Medium</option>
+        <option value="HIGH">High</option>
+      {% endif %}
+    </select>
+
+    <br><br>
+
+    <label>Notes</label><br>
+    <textarea name="notes" rows="6" cols="70"></textarea>
+
+    <br><br>
+    <button type="submit">Save</button>
   </form>
 
-  <p><a href="{% url 'qc:frame_detail' variant.pk %}">Back to frame</a></p>
-{% endblock %}
+  <p><a href="{% url 'frames_list' %}">← Back to Frames</a></p>
+</body>
+</html>

@@ -8,7 +8,6 @@ from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from .models import Complaint, FrameStyle, FrameVariant, Store
@@ -19,9 +18,6 @@ from .models import Complaint, FrameStyle, FrameVariant, Store
 # -------------------------
 @login_required
 def home(request):
-    """
-    Simple dashboard / landing page.
-    """
     stats = {
         "styles": FrameStyle.objects.count(),
         "variants": FrameVariant.objects.count(),
@@ -30,19 +26,17 @@ def home(request):
     return render(request, "qc/home.html", {"stats": stats})
 
 
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import render
-from .models import FrameVariant
-
+# -------------------------
+# FRAMES LIST
+# -------------------------
 @login_required
 def frames_list(request):
-    qs = (
+    frames = (
         FrameVariant.objects
         .select_related("style")
-        .order_by("-created_at")
+        .order_by("-created_at", "-id")
     )
-    return render(request, "qc/frames_list.html", {"frames": qs})
-
+    return render(request, "qc/frames_list.html", {"frames": frames})
 
 
 # -------------------------
@@ -50,11 +44,12 @@ def frames_list(request):
 # -------------------------
 @login_required
 def complaints_list(request):
-    qs = (
-        Complaint.objects.select_related("variant", "variant__style", "store")
-        .order_by("-created_at")
+    complaints = (
+        Complaint.objects
+        .select_related("variant", "variant__style", "store")
+        .order_by("-created_at", "-id")
     )
-    return render(request, "qc/complaints_list.html", {"complaints": qs})
+    return render(request, "qc/complaints_list.html", {"complaints": complaints})
 
 
 # -------------------------
@@ -63,7 +58,10 @@ def complaints_list(request):
 @login_required
 @require_http_methods(["GET", "POST"])
 def complaint_create_for_frame(request, pk: int):
-    variant = get_object_or_404(FrameVariant.objects.select_related("style"), pk=pk)
+    variant = get_object_or_404(
+        FrameVariant.objects.select_related("style"),
+        pk=pk
+    )
 
     if request.method == "POST":
         store_id = request.POST.get("store") or None
@@ -71,18 +69,17 @@ def complaint_create_for_frame(request, pk: int):
         severity = request.POST.get("severity") or "LOW"
         notes = request.POST.get("notes") or ""
 
-        store = None
-        if store_id:
-            store = Store.objects.filter(id=store_id).first()
+        store = Store.objects.filter(id=store_id).first() if store_id else None
 
+        # IMPORTANT: don't set created_at manually if model uses auto_now_add=True
         Complaint.objects.create(
             variant=variant,
             store=store,
             failure_type=failure_type,
             severity=severity,
             notes=notes,
-            created_at=timezone.now(),
         )
+
         messages.success(request, f"Complaint created for {variant.sku}")
         return redirect("complaints_list")
 
@@ -93,8 +90,8 @@ def complaint_create_for_frame(request, pk: int):
         {
             "variant": variant,
             "stores": stores,
-            "failure_choices": Complaint.FAILURE_CHOICES,
-            "severity_choices": Complaint.SEVERITY_CHOICES,
+            "failure_choices": getattr(Complaint, "FAILURE_CHOICES", None),
+            "severity_choices": getattr(Complaint, "SEVERITY_CHOICES", None),
         },
     )
 
@@ -121,16 +118,12 @@ def download_frames_template(request):
 @login_required
 @require_http_methods(["GET", "POST"])
 def import_frames(request):
-    """
-    Upload a CSV to create/update FrameStyle + FrameVariant.
-    """
     if request.method == "POST":
         f = request.FILES.get("file")
         if not f:
             messages.error(request, "Please choose a CSV file.")
             return redirect("import_frames")
 
-        # Read CSV
         raw = f.read().decode("utf-8-sig", errors="replace")
         reader = csv.DictReader(io.StringIO(raw))
 
@@ -169,8 +162,7 @@ def import_frames(request):
                 if style_created:
                     created_styles += 1
                 else:
-                    # keep supplier updated if provided
-                    if supplier and style.supplier != supplier:
+                    if supplier and getattr(style, "supplier", "") != supplier:
                         style.supplier = supplier
                         style.save(update_fields=["supplier"])
                         updated_styles += 1
@@ -182,13 +174,13 @@ def import_frames(request):
                         "color": color,
                         "size": size,
                         "status": status,
-                        "created_at": timezone.now(),
                     },
                 )
                 if v_created:
                     created_variants += 1
                 else:
                     changed = False
+
                     if variant.style_id != style.id:
                         variant.style = style
                         changed = True
