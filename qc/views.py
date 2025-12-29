@@ -9,8 +9,7 @@ from datetime import timedelta
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Q
-from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, HttpRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
@@ -23,24 +22,37 @@ from .models import (
     DefectPhoto,
     ReworkTicket,
     QualityFlag,
-    # Complaints module (you said restored)
     Store,
     Complaint,
     ComplaintAttachment,
 )
 
-from .Services.metrics import (
-    counts_overview,
-    first_pass_yield,
-    avg_qc_time_hours,
-    urgent_sla_breaches,
-    auto_flag,
-)
-from .Services.process import DEEP_COSMETIC_STEPS
+# -------------------------------------------------------------------
+# Services import (bulletproof for Linux case-sensitivity on Render):
+# supports either qc/services/* OR qc/Services/*
+# -------------------------------------------------------------------
+try:
+    from .services.metrics import (
+        counts_overview,
+        first_pass_yield,
+        avg_qc_time_hours,
+        urgent_sla_breaches,
+        auto_flag,
+    )
+    from .services.process import DEEP_COSMETIC_STEPS
+except ModuleNotFoundError:
+    from .Services.metrics import (
+        counts_overview,
+        first_pass_yield,
+        avg_qc_time_hours,
+        urgent_sla_breaches,
+        auto_flag,
+    )
+    from .Services.process import DEEP_COSMETIC_STEPS
 
 
 # -----------------------
-# Health
+# Health / API basics
 # -----------------------
 def health(request: HttpRequest):
     return JsonResponse({"ok": True, "message": "QC service running"})
@@ -55,8 +67,7 @@ def home(request: HttpRequest):
 
 
 @login_required
-def ui_home(request: HttpRequest):
-    # /ui/ -> dashboard
+def ui_root(request: HttpRequest):
     return redirect("ui_dashboard")
 
 
@@ -67,13 +78,13 @@ def ui_home(request: HttpRequest):
 def ui_dashboard(request: HttpRequest):
     """
     Dashboard:
-    - counts overview (not inspected / in progress / passed / failed)
+    - counts: not inspected / in progress / passed / failed
     - First Pass Yield
     - avg QC time
     - urgent SLA breaches
-    - auto flags (model/lab defect threshold last 7 days)
+    - active quality flags
     """
-    # Run auto flag calculation (never crash dashboard)
+    # run auto-flag calculation (dashboard should never crash)
     try:
         auto_flag(defect_threshold_percent=10.0, days=7, min_sample=10)
     except Exception:
@@ -101,16 +112,17 @@ def ui_dashboard(request: HttpRequest):
 # -----------------------
 @login_required
 def frames_list(request: HttpRequest):
-    status = (request.GET.get("status") or "").strip()
-    q = (request.GET.get("q") or "").strip()
+    """
+    Frames/Units list page
+    """
+    status = request.GET.get("status", "").strip()
+    q = request.GET.get("q", "").strip()
 
     units = Unit.objects.all().order_by("-received_at")
-
     if status:
         units = units.filter(status=status)
-
     if q:
-        units = units.filter(Q(unit_id__icontains=q) | Q(order_id__icontains=q))
+        units = units.filter(unit_id__icontains=q) | units.filter(order_id__icontains=q)
 
     context = {
         "units": units[:500],
@@ -122,96 +134,61 @@ def frames_list(request: HttpRequest):
 
 
 # -----------------------
-# Unit detail page
+# Import template download/upload
 # -----------------------
 @login_required
-def unit_detail(request: HttpRequest, unit_id: int):
-    """
-    Detail view by DB primary key (Unit.id).
-    Shows inspections, defects, tickets.
-    """
-    unit = get_object_or_404(Unit, id=unit_id)
-    inspections = (
-        Inspection.objects.filter(unit=unit)
-        .select_related("tech_user")
-        .order_by("-attempt_number")
-    )
-    tickets = (
-        ReworkTicket.objects.filter(unit=unit)
-        .select_related("inspection", "assigned_to")
-        .order_by("-created_at")
-    )
-    defects = (
-        Defect.objects.filter(stage_result__inspection__unit=unit)
-        .select_related("stage_result")
-        .order_by("-id")
-    )
-
-    context = {
-        "unit": unit,
-        "inspections": inspections,
-        "tickets": tickets,
-        "defects": defects,
-    }
-    return render(request, "qc/unit_detail.html", context)
+def import_frames_page(request: HttpRequest):
+    return render(request, "qc/import_frames.html")
 
 
-# -----------------------
-# Import frames (single endpoint)
-# matches qc/urls.py: path("import/frames/", views.import_frames, name="import_frames")
-# -----------------------
 @login_required
-@require_http_methods(["GET", "POST"])
+def download_frames_template(request: HttpRequest):
+    """
+    CSV template for uploads:
+    unit_id,order_id,frame_model,lab,priority,status
+    """
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["unit_id", "order_id", "frame_model", "lab", "priority", "status"])
+    w.writerow(["U-0001", "ORD-0001", "Model 100", "Lab A", "NORMAL", "RECEIVED"])
+    w.writerow(["U-0002", "ORD-0002", "Model 200", "Lab B", "URGENT", "RECEIVED"])
+
+    resp = HttpResponse(buf.getvalue(), content_type="text/csv")
+    resp["Content-Disposition"] = 'attachment; filename="frames_import_template.csv"'
+    return resp
+
+
+@login_required
 @transaction.atomic
-def import_frames(request: HttpRequest):
+def upload_frames_csv(request: HttpRequest):
     """
-    GET:
-      - render import page
-    POST:
-      - if action=download_template => returns CSV
-      - else expects CSV upload under "file"
+    Accept CSV upload and upsert Units.
     """
-    if request.method == "GET":
-        return render(request, "qc/import_frames.html")
+    if request.method != "POST":
+        return redirect("import_frames_page")
 
-    action = (request.POST.get("action") or "").strip()
-
-    # Download template via POST (simple + avoids adding another URL)
-    if action == "download_template":
-        buf = io.StringIO()
-        w = csv.writer(buf)
-        w.writerow(["unit_id", "order_id", "frame_model", "lab", "priority", "status"])
-        w.writerow(["U-0001", "ORD-0001", "Model 100", "Lab A", "NORMAL", "RECEIVED"])
-        w.writerow(["U-0002", "ORD-0002", "Model 200", "Lab B", "URGENT", "RECEIVED"])
-
-        resp = HttpResponse(buf.getvalue(), content_type="text/csv")
-        resp["Content-Disposition"] = 'attachment; filename="frames_import_template.csv"'
-        return resp
-
-    # Upload CSV
     f = request.FILES.get("file")
     if not f:
         messages.error(request, "Please choose a CSV file.")
-        return redirect("import_frames")
+        return redirect("import_frames_page")
 
     try:
         content = f.read().decode("utf-8-sig")
     except Exception:
         messages.error(request, "Could not read file. Please upload a UTF-8 CSV.")
-        return redirect("import_frames")
+        return redirect("import_frames_page")
 
     reader = csv.DictReader(io.StringIO(content))
     required = {"unit_id", "order_id", "frame_model", "lab", "priority", "status"}
     if not required.issubset(set(reader.fieldnames or [])):
         messages.error(request, f"CSV missing columns. Required: {', '.join(sorted(required))}")
-        return redirect("import_frames")
+        return redirect("import_frames_page")
 
     created = 0
     updated = 0
-
     for row in reader:
-        unit_code = (row.get("unit_id") or "").strip()
-        if not unit_code:
+        unit_id = (row.get("unit_id") or "").strip()
+        if not unit_id:
             continue
 
         defaults = {
@@ -222,9 +199,11 @@ def import_frames(request: HttpRequest):
             "status": (row.get("status") or "RECEIVED").strip().upper(),
         }
 
-        obj, was_created = Unit.objects.update_or_create(unit_id=unit_code, defaults=defaults)
-        created += 1 if was_created else 0
-        updated += 0 if was_created else 1
+        _, was_created = Unit.objects.update_or_create(unit_id=unit_id, defaults=defaults)
+        if was_created:
+            created += 1
+        else:
+            updated += 1
 
     messages.success(request, f"Import complete. Created: {created}, Updated: {updated}.")
     return redirect("frames_list")
@@ -232,11 +211,10 @@ def import_frames(request: HttpRequest):
 
 # -----------------------
 # Inspection wizard (4-step deep cosmetic process)
-# NOTE: If you want this routed, add URLs for start_inspection + inspection_wizard
 # -----------------------
 @login_required
-def start_inspection(request: HttpRequest, unit_pk: int):
-    unit = get_object_or_404(Unit, id=unit_pk)
+def start_inspection(request: HttpRequest, unit_id: str):
+    unit = get_object_or_404(Unit, unit_id=unit_id)
 
     last_attempt = Inspection.objects.filter(unit=unit).order_by("-attempt_number").first()
     attempt_number = (last_attempt.attempt_number + 1) if last_attempt else 1
@@ -253,6 +231,7 @@ def start_inspection(request: HttpRequest, unit_pk: int):
     unit.status = "QC_IN_PROGRESS"
     unit.save(update_fields=["status"])
 
+    # Create stage placeholders for 4-stage process
     for stage in ["INTAKE", "COSMETIC", "FIT", "DECISION"]:
         InspectionStageResult.objects.create(
             inspection=inspection,
@@ -266,7 +245,6 @@ def start_inspection(request: HttpRequest, unit_pk: int):
 
 
 @login_required
-@require_http_methods(["GET", "POST"])
 def inspection_wizard(request: HttpRequest, inspection_id: int):
     inspection = get_object_or_404(Inspection, id=inspection_id)
     unit = inspection.unit
@@ -275,6 +253,7 @@ def inspection_wizard(request: HttpRequest, inspection_id: int):
     intake = stage_results.get("INTAKE")
     cosmetic = stage_results.get("COSMETIC")
     fit = stage_results.get("FIT")
+    decision = stage_results.get("DECISION")  # kept for template symmetry (not edited directly)
 
     training_mode = inspection.training_mode_used
 
@@ -334,7 +313,7 @@ def inspection_wizard(request: HttpRequest, inspection_id: int):
                 sr.save()
 
         elif action == "finalize":
-            final = request.POST.get("final_result", "PASS")
+            final = request.POST.get("final_result", "PASS").upper()
             inspection.final_result = final
             inspection.completed_at = timezone.now()
             inspection.save(update_fields=["final_result", "completed_at"])
@@ -381,13 +360,13 @@ def inspection_wizard(request: HttpRequest, inspection_id: int):
 
 
 # -----------------------
-# Complaints module
+# Complaints module (restored)
 # -----------------------
 @login_required
 def complaints_list(request: HttpRequest):
-    status = (request.GET.get("status") or "").strip()
-    store_code = (request.GET.get("store") or "").strip()
-    q = (request.GET.get("q") or "").strip()
+    status = request.GET.get("status", "").strip()
+    store_code = request.GET.get("store", "").strip()
+    q = request.GET.get("q", "").strip()
 
     qs = Complaint.objects.select_related("store", "unit", "created_by").order_by("-created_at")
 
@@ -396,12 +375,7 @@ def complaints_list(request: HttpRequest):
     if store_code:
         qs = qs.filter(store__code=store_code)
     if q:
-        qs = qs.filter(
-            Q(title__icontains=q)
-            | Q(description__icontains=q)
-            | Q(unit_id_text__icontains=q)
-            | Q(order_id_text__icontains=q)
-        )
+        qs = qs.filter(title__icontains=q) | qs.filter(description__icontains=q) | qs.filter(unit_id_text__icontains=q)
 
     stores = Store.objects.filter(is_active=True).order_by("name")
 
