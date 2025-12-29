@@ -1,6 +1,6 @@
 import json
 from django.http import JsonResponse
-from django.utils.timezone import now
+from django.utils.timezone import now, timedelta
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
 
@@ -11,7 +11,63 @@ from .models import (
     Defect,
     ReworkTicket,
 )
-from .services.metrics import pass_rate, first_pass_yield, avg_qc_time, bottleneck_stage
+
+
+# -----------------------------
+# SIMPLE METRICS (INLINE)
+# -----------------------------
+def _pass_rate(days=7):
+    start = now() - timedelta(days=days)
+    total = Inspection.objects.filter(started_at__gte=start).count()
+    passed = Inspection.objects.filter(started_at__gte=start, final_result="PASS").count()
+    return 0 if total == 0 else round((passed / total) * 100, 2)
+
+
+def _first_pass_yield(days=7):
+    start = now() - timedelta(days=days)
+
+    first_pass = Inspection.objects.filter(
+        started_at__gte=start,
+        attempt_number=1,
+        final_result="PASS"
+    )
+
+    reworked_unit_ids = set(
+        ReworkTicket.objects.filter(inspection__in=first_pass)
+        .values_list("unit_id", flat=True)
+    )
+
+    fp_count = first_pass.exclude(unit_id__in=reworked_unit_ids).count()
+    total = first_pass.count()
+    return 0 if total == 0 else round((fp_count / total) * 100, 2)
+
+
+def _avg_qc_time(days=7):
+    start = now() - timedelta(days=days)
+    qs = Inspection.objects.filter(started_at__gte=start, completed_at__isnull=False)
+
+    secs = [
+        (i.completed_at - i.started_at).total_seconds()
+        for i in qs
+        if i.completed_at and i.started_at
+    ]
+    return 0 if not secs else round((sum(secs) / len(secs)) / 60, 2)
+
+
+def _bottleneck_stage(days=7):
+    start = now() - timedelta(days=days)
+    qs = InspectionStageResult.objects.filter(started_at__gte=start)
+
+    durations = {}
+    for r in qs:
+        dur = (r.completed_at - r.started_at).total_seconds()
+        durations.setdefault(r.stage, []).append(dur)
+
+    if not durations:
+        return None
+
+    avg = {k: sum(v) / len(v) for k, v in durations.items()}
+    return max(avg, key=avg.get)
 
 
 # -----------------------------------
@@ -23,46 +79,29 @@ def health(request):
 
 # -----------------------------------
 # LEGACY ENDPOINTS (SAFE STUBS)
-# These prevent crashes while you migrate your frontend.
-# They DO NOT require old models like Store/Complaint.
 # -----------------------------------
-
 @login_required
 def legacy_stores(request):
-    # Old UI expected a list of stores
-    return JsonResponse({
-        "legacy": True,
-        "items": []
-    })
+    return JsonResponse({"legacy": True, "items": []})
 
 
 @login_required
 def legacy_frame_styles(request):
-    # Old UI expected styles list
-    return JsonResponse({
-        "legacy": True,
-        "items": []
-    })
+    return JsonResponse({"legacy": True, "items": []})
 
 
 @login_required
 def legacy_frame_variants(request):
-    # Old UI expected variants list
-    return JsonResponse({
-        "legacy": True,
-        "items": []
-    })
+    return JsonResponse({"legacy": True, "items": []})
 
 
 @csrf_exempt
 @login_required
 def legacy_complaints(request):
-    # Old UI expected complaints list + create
     if request.method == "GET":
         return JsonResponse({"legacy": True, "items": []})
 
     if request.method == "POST":
-        # Accept and return a fake id so old UI doesn't crash
         payload = json.loads(request.body.decode("utf-8") or "{}")
         return JsonResponse({
             "legacy": True,
@@ -70,7 +109,7 @@ def legacy_complaints(request):
             "complaint": {
                 "id": 1,
                 "data": payload,
-                "note": "Legacy endpoint stub. Migrate UI to QC v2.1."
+                "note": "Legacy stub. Old Complaint models removed."
             }
         })
 
@@ -79,12 +118,11 @@ def legacy_complaints(request):
 
 @login_required
 def legacy_complaint_detail(request, complaint_id: int):
-    # Old UI expected complaint detail
     return JsonResponse({
         "legacy": True,
         "complaint": {
             "id": complaint_id,
-            "note": "Legacy endpoint stub. Complaint models removed."
+            "note": "Legacy stub. Old Complaint models removed."
         }
     })
 
@@ -92,7 +130,6 @@ def legacy_complaint_detail(request, complaint_id: int):
 @csrf_exempt
 @login_required
 def legacy_complaint_attachments(request, complaint_id: int):
-    # Old UI expected attachment list + upload
     if request.method == "GET":
         return JsonResponse({"legacy": True, "items": []})
 
@@ -100,7 +137,7 @@ def legacy_complaint_attachments(request, complaint_id: int):
         return JsonResponse({
             "legacy": True,
             "uploaded": True,
-            "note": "Legacy endpoint stub. Attachment models removed."
+            "note": "Legacy stub. Old Attachment models removed."
         })
 
     return JsonResponse({"error": "method not allowed"}, status=405)
@@ -113,17 +150,6 @@ def legacy_complaint_attachments(request, complaint_id: int):
 @csrf_exempt
 @login_required
 def start_inspection(request):
-    """
-    POST JSON:
-    {
-      "unit_id": "U123",
-      "order_id": "O999",
-      "frame_model": "Rayban 123",
-      "lab": "LabA",
-      "priority": "NORMAL" | "URGENT",
-      "training_mode_used": true/false
-    }
-    """
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
 
@@ -144,7 +170,6 @@ def start_inspection(request):
         },
     )
 
-    # Update unit fields if provided
     for field in ["order_id", "frame_model", "lab", "priority"]:
         if payload.get(field):
             setattr(unit, field, payload[field])
@@ -172,22 +197,6 @@ def start_inspection(request):
 @csrf_exempt
 @login_required
 def complete_stage(request):
-    """
-    POST JSON:
-    {
-      "inspection_id": 123,
-      "stage": "INTAKE"|"COSMETIC"|"RX"|"FIT"|"FINAL_PREP"|"DECISION",
-      "status": "PASS"|"FAIL",
-      "notes": "text",
-      "data": {...},
-      "defect": {  # required if FAIL
-        "category": "COSMETIC",
-        "reason_code": "LENS_SCRATCH",
-        "severity": "LOW"|"MED"|"HIGH",
-        "notes": "optional"
-      }
-    }
-    """
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
 
@@ -250,13 +259,6 @@ def complete_stage(request):
 @csrf_exempt
 @login_required
 def finalize_inspection(request):
-    """
-    POST JSON: { "inspection_id": 123 }
-
-    Rule:
-    - If all required stages PASS -> PASS + unit STORE_READY
-    - Else FAIL (unit stays REWORK/QUARANTINE/QC_IN_PROGRESS)
-    """
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
 
@@ -301,9 +303,6 @@ def finalize_inspection(request):
 
 @login_required
 def dashboard(request):
-    """
-    GET /api/qc/dashboard/?days=7
-    """
     try:
         days = int(request.GET.get("days", "7"))
     except ValueError:
@@ -311,9 +310,8 @@ def dashboard(request):
 
     return JsonResponse({
         "days": days,
-        "pass_rate": pass_rate(days),
-        "first_pass_yield": first_pass_yield(days),
-        "avg_qc_time_minutes": avg_qc_time(days),
-        "bottleneck_stage": bottleneck_stage(days),
+        "pass_rate": _pass_rate(days),
+        "first_pass_yield": _first_pass_yield(days),
+        "avg_qc_time_minutes": _avg_qc_time(days),
+        "bottleneck_stage": _bottleneck_stage(days),
     })
-
