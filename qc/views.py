@@ -1,3 +1,4 @@
+
 import json
 from django.http import JsonResponse
 from django.utils.timezone import now, timedelta
@@ -11,6 +12,16 @@ from .models import (
     Defect,
     ReworkTicket,
 )
+
+# -----------------------------
+# HOME + HEALTH (KEEP OLD URLS WORKING)
+# -----------------------------
+def home(request):
+    return JsonResponse({"ok": True, "message": "QC service running"})
+
+
+def health(request):
+    return JsonResponse({"ok": True, "service": "qc"})
 
 
 # -----------------------------
@@ -68,13 +79,6 @@ def _bottleneck_stage(days=7):
 
     avg = {k: sum(v) / len(v) for k, v in durations.items()}
     return max(avg, key=avg.get)
-
-
-# -----------------------------------
-# HEALTH
-# -----------------------------------
-def health(request):
-    return JsonResponse({"ok": True, "service": "qc"})
 
 
 # -----------------------------------
@@ -144,9 +148,8 @@ def legacy_complaint_attachments(request, complaint_id: int):
 
 
 # -----------------------------------
-# QC v2.1 ENDPOINTS (REAL)
+# QC v2.1 ENDPOINTS
 # -----------------------------------
-
 @csrf_exempt
 @login_required
 def start_inspection(request):

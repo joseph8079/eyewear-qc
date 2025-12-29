@@ -5,7 +5,7 @@ urlpatterns = [
     path("", views.home, name="home"),
     path("health/", views.health, name="qc-health"),
 
-    # Legacy endpoints (stubs)
+    # Legacy endpoints
     path("api/stores/", views.legacy_stores, name="legacy-stores"),
     path("api/frame-styles/", views.legacy_frame_styles, name="legacy-frame-styles"),
     path("api/frame-variants/", views.legacy_frame_variants, name="legacy-frame-variants"),
