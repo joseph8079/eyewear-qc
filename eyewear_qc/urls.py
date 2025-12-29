@@ -6,12 +6,15 @@ from qc import views as qc_views
 urlpatterns = [
     path("admin/", admin.site.urls),
 
+    # Django auth (adds /accounts/login/, /accounts/logout/, etc.)
+    path("accounts/", include("django.contrib.auth.urls")),
+
     # Health endpoint (Render uses this)
     path("health/", qc_views.health, name="health"),
 
     # Root goes to UI
     path("", RedirectView.as_view(url="/ui/", permanent=False), name="root"),
 
-    # QC app (UI + APIs)
+    # QC app
     path("", include("qc.urls")),
 ]
