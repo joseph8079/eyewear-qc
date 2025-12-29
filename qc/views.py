@@ -318,3 +318,25 @@ def dashboard(request):
         "avg_qc_time_minutes": _avg_qc_time(days),
         "bottleneck_stage": _bottleneck_stage(days),
     })
+def legacy_frames_page(request):
+    return JsonResponse({
+        "ok": True,
+        "page": "frames",
+        "note": "Legacy page placeholder. UI will be migrated to QC v2.1."
+    })
+
+
+def legacy_complaints_page(request):
+    return JsonResponse({
+        "ok": True,
+        "page": "complaints",
+        "note": "Legacy page placeholder. Complaints module replaced by QC workflow."
+    })
+
+
+def legacy_import_frames_page(request):
+    return JsonResponse({
+        "ok": True,
+        "page": "import/frames",
+        "note": "Legacy import placeholder. Add import tool later if needed."
+    })
