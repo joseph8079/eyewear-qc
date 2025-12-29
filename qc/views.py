@@ -29,14 +29,14 @@ from .models import (
     ComplaintAttachment,
 )
 
-from .services.metrics import (
+from .Services.metrics import (
     counts_overview,
     first_pass_yield,
     avg_qc_time_hours,
     urgent_sla_breaches,
     auto_flag,
 )
-from .services.process import DEEP_COSMETIC_STEPS
+from .Services.process import DEEP_COSMETIC_STEPS
 
 
 # -----------------------

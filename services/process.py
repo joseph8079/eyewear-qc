@@ -1,10 +1,8 @@
-cat > qc/services/process.py <<'PY'
-# qc/services/process.py
+# qc/Services/process.py
 
 DEEP_COSMETIC_STEPS = [
-    {"key": "bend_check", "label": "Bend Check (temple / bridge flex)"},
-    {"key": "torque_check", "label": "Torque / twist check (light torsion)"},
-    {"key": "drop_check", "label": "Drop / impact simulation (controlled)"},
-    {"key": "final_visual", "label": "Final visual under light + loupe"},
+    {"key": "bend_check", "label": "Bend check (temples/frame symmetry)"},
+    {"key": "throw_test", "label": "Throw / drop simulation (light stress test)"},
+    {"key": "hinge_stress", "label": "Hinge stress test (open/close resistance & play)"},
+    {"key": "final_visual", "label": "Final visual scan under light"},
 ]
-PY
