@@ -1,130 +1,155 @@
+# qc/services/metrics.py
+from __future__ import annotations
 
 from datetime import timedelta
+
+from django.db.models import Count
 from django.utils import timezone
-from django.db.models import Count, Q, Avg
-from qc.models import Unit, Inspection, InspectionStageResult, Defect, QualityFlag
+
+from qc.models import Unit, Inspection, Defect, QualityFlag
 
 
-def counts_overview():
-    """Dashboard counts: not inspected yet, passed, failed."""
-    not_inspected = Unit.objects.filter(status="RECEIVED").count()
-    passed = Unit.objects.filter(status="STORE_READY").count()
-    failed = Unit.objects.filter(status__in=["REWORK", "RETEST", "QUARANTINE"]).count()
-    in_progress = Unit.objects.filter(status="QC_IN_PROGRESS").count()
+def counts_overview() -> dict:
+    """
+    Returns counts for dashboard:
+      - not_inspected (RECEIVED)
+      - in_progress (QC_IN_PROGRESS)
+      - passed (STORE_READY)
+      - failed (REWORK, RETEST, QUARANTINE)
+    """
     return {
-        "not_inspected": not_inspected,
-        "in_progress": in_progress,
-        "passed": passed,
-        "failed": failed,
+        "not_inspected": Unit.objects.filter(status="RECEIVED").count(),
+        "in_progress": Unit.objects.filter(status="QC_IN_PROGRESS").count(),
+        "passed": Unit.objects.filter(status="STORE_READY").count(),
+        "failed": Unit.objects.filter(status__in=["REWORK", "RETEST", "QUARANTINE"]).count(),
+        "total": Unit.objects.all().count(),
     }
 
 
-def first_pass_yield(days=7):
-    """Pass with zero rework: first inspection PASS and unit went STORE_READY without REWORK/RETEST on later attempts."""
+def first_pass_yield(days: int = 7) -> float:
+    """
+    FPY = units that PASS on attempt 1 / units with attempt 1 completed.
+    """
     since = timezone.now() - timedelta(days=days)
+    first_attempts = Inspection.objects.filter(attempt_number=1, completed_at__isnull=False, started_at__gte=since)
 
-    # Units that completed at least one inspection in window
-    completed = Inspection.objects.filter(completed_at__gte=since).values_list("unit_id", flat=True).distinct()
-    if not completed:
-        return {"fpy": 0.0, "numerator": 0, "denominator": 0}
+    denom = first_attempts.count()
+    if denom == 0:
+        return 0.0
 
-    # First inspection per unit: attempt_number=1 and PASS
-    first_pass_units = set(
-        Inspection.objects.filter(unit_id__in=completed, attempt_number=1, final_result="PASS")
-        .values_list("unit_id", flat=True)
-        .distinct()
-    )
-
-    # Any unit that had rework/retest statuses at any time after
-    bad_units = set(Unit.objects.filter(id__in=completed, status__in=["REWORK", "RETEST", "QUARANTINE"]).values_list("id", flat=True))
-
-    numerator = len(first_pass_units - bad_units)
-    denominator = len(set(completed))
-    fpy = (numerator / denominator) * 100.0 if denominator else 0.0
-    return {"fpy": round(fpy, 2), "numerator": numerator, "denominator": denominator}
+    num = first_attempts.filter(final_result="PASS").count()
+    return round((num / denom) * 100.0, 2)
 
 
-def avg_qc_time_hours(days=7):
-    """Average hours from inspection started -> completed."""
+def avg_qc_time_hours(days: int = 7) -> float:
+    """
+    Avg hours from inspection started_at to completed_at.
+    """
     since = timezone.now() - timedelta(days=days)
     qs = Inspection.objects.filter(completed_at__isnull=False, started_at__gte=since)
-    # avg duration in seconds:
-    durations = []
+
+    total_seconds = 0.0
+    n = 0
     for ins in qs.only("started_at", "completed_at"):
-        durations.append((ins.completed_at - ins.started_at).total_seconds())
-    if not durations:
+        if ins.started_at and ins.completed_at:
+            total_seconds += (ins.completed_at - ins.started_at).total_seconds()
+            n += 1
+
+    if n == 0:
         return 0.0
-    return round(sum(durations) / len(durations) / 3600.0, 2)
+
+    return round((total_seconds / n) / 3600.0, 2)
 
 
-def urgent_sla_breaches(hours_threshold=6):
-    """Urgent jobs stuck > X hours (RECEIVED or QC_IN_PROGRESS)"""
+def urgent_sla_breaches(hours_threshold: int = 6) -> int:
+    """
+    Urgent SLA breaches:
+    Urgent units that are not STORE_READY within N hours of received_at.
+    """
     cutoff = timezone.now() - timedelta(hours=hours_threshold)
-    qs = Unit.objects.filter(priority="URGENT", status__in=["RECEIVED", "QC_IN_PROGRESS"], received_at__lte=cutoff)
-    return qs.count()
+    return Unit.objects.filter(priority="URGENT", status__in=["RECEIVED", "QC_IN_PROGRESS", "REWORK", "RETEST"]).filter(
+        received_at__lte=cutoff
+    ).count()
 
 
-def defect_rate_by_key(flag_type="MODEL", days=7, min_sample=10):
+def auto_flag(defect_threshold_percent: float = 10.0, days: int = 7, min_sample: int = 10) -> int:
     """
-    Returns list of dicts: key, sample_size, defect_rate%
-    - sample_size = inspections completed in window for that key
-    - defect_rate = units with FAIL (final_result=FAIL) / total
-    """
-    since = timezone.now() - timedelta(days=days)
-
-    inspections = Inspection.objects.filter(completed_at__gte=since, final_result__in=["PASS", "FAIL"]).select_related("unit")
-
-    buckets = {}
-    for ins in inspections:
-        key = ins.unit.frame_model if flag_type == "MODEL" else ins.unit.lab
-        if key not in buckets:
-            buckets[key] = {"total": 0, "fails": 0}
-        buckets[key]["total"] += 1
-        if ins.final_result == "FAIL":
-            buckets[key]["fails"] += 1
-
-    out = []
-    for key, v in buckets.items():
-        if v["total"] < min_sample:
-            continue
-        rate = (v["fails"] / v["total"]) * 100.0
-        out.append({"key": key, "sample_size": v["total"], "defect_rate": round(rate, 2)})
-    out.sort(key=lambda x: x["defect_rate"], reverse=True)
-    return out
-
-
-def auto_flag(defect_threshold_percent=10.0, days=7, min_sample=10):
-    """
-    Auto create/update QualityFlag when MODEL or LAB exceeds threshold in last 7 days.
+    Auto-flag labs and frame_models if defect rate exceeds threshold in a time window.
+    Creates QualityFlag rows. Returns number of new flags created.
     """
     now = timezone.now()
     window_start = now - timedelta(days=days)
 
-    for flag_type in ["MODEL", "LAB"]:
-        rates = defect_rate_by_key(flag_type=flag_type, days=days, min_sample=min_sample)
-        for r in rates:
-            if r["defect_rate"] < defect_threshold_percent:
-                continue
+    # Units in window (by received)
+    units = Unit.objects.filter(received_at__gte=window_start)
 
-            flag, created = QualityFlag.objects.get_or_create(
-                flag_type=flag_type,
-                flag_key=r["key"],
+    # Total per lab
+    lab_totals = units.values("lab").annotate(n=Count("id"))
+    model_totals = units.values("frame_model").annotate(n=Count("id"))
+
+    # Defective units in window (any defect tied to inspection->unit)
+    defective_unit_ids = (
+        Defect.objects.filter(stage_result__inspection__started_at__gte=window_start)
+        .values_list("stage_result__inspection__unit_id", flat=True)
+        .distinct()
+    )
+    defective_units = Unit.objects.filter(id__in=list(defective_unit_ids))
+
+    # Defects per lab/model
+    lab_defects = defective_units.values("lab").annotate(n=Count("id"))
+    model_defects = defective_units.values("frame_model").annotate(n=Count("id"))
+
+    lab_def_map = {x["lab"]: x["n"] for x in lab_defects}
+    model_def_map = {x["frame_model"]: x["n"] for x in model_defects}
+
+    created = 0
+
+    # LAB flags
+    for row in lab_totals:
+        lab = row["lab"]
+        total = row["n"]
+        if not lab or total < min_sample:
+            continue
+        defects = lab_def_map.get(lab, 0)
+        rate = (defects / total) * 100.0
+        if rate >= defect_threshold_percent:
+            obj, was_created = QualityFlag.objects.get_or_create(
+                flag_type="LAB",
+                flag_key=lab,
                 window_start=window_start,
                 window_end=now,
                 defaults={
-                    "sample_size": r["sample_size"],
-                    "defect_rate": r["defect_rate"],
+                    "sample_size": total,
+                    "defect_rate": rate,
                     "threshold": defect_threshold_percent,
                     "is_active": True,
                 },
             )
-            if not created:
-                flag.sample_size = r["sample_size"]
-                flag.defect_rate = r["defect_rate"]
-                flag.threshold = defect_threshold_percent
-                flag.window_start = window_start
-                flag.window_end = now
-                flag.is_active = True
-                flag.save()
+            if was_created:
+                created += 1
 
-    return True
+    # MODEL flags
+    for row in model_totals:
+        model = row["frame_model"]
+        total = row["n"]
+        if not model or total < min_sample:
+            continue
+        defects = model_def_map.get(model, 0)
+        rate = (defects / total) * 100.0
+        if rate >= defect_threshold_percent:
+            obj, was_created = QualityFlag.objects.get_or_create(
+                flag_type="MODEL",
+                flag_key=model,
+                window_start=window_start,
+                window_end=now,
+                defaults={
+                    "sample_size": total,
+                    "defect_rate": rate,
+                    "threshold": defect_threshold_percent,
+                    "is_active": True,
+                },
+            )
+            if was_created:
+                created += 1
+
+    return created
