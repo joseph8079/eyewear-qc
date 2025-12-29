@@ -9,6 +9,7 @@ from datetime import timedelta
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.db.models import Avg, Count, F, Q
 from django.http import HttpResponse, JsonResponse, HttpRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -27,40 +28,196 @@ from .models import (
     ComplaintAttachment,
 )
 
-# -------------------------------------------------------------------
-# Services import (bulletproof for Linux case-sensitivity on Render):
-# supports either qc/services/* OR qc/Services/*
-# -------------------------------------------------------------------
-try:
-    from .services.metrics import (
-        counts_overview,
-        first_pass_yield,
-        avg_qc_time_hours,
-        urgent_sla_breaches,
-        auto_flag,
-    )
-    from .services.process import DEEP_COSMETIC_STEPS
-except ModuleNotFoundError:
-    from .Services.metrics import (
-        counts_overview,
-        first_pass_yield,
-        avg_qc_time_hours,
-        urgent_sla_breaches,
-        auto_flag,
-    )
-    from .Services.process import DEEP_COSMETIC_STEPS
+# =============================================================================
+# Deep Cosmetic Steps (4-step process you requested)
+# =============================================================================
+DEEP_COSMETIC_STEPS = [
+    {
+        "key": "bend_test",
+        "label": "Bend Test",
+        "hint": "Gently flex temples/front to detect stress marks, cracks, loose inserts.",
+    },
+    {
+        "key": "twist_test",
+        "label": "Twist / Torque Test",
+        "hint": "Light torsion check for hidden fractures, misaligned fronts, weak hinges.",
+    },
+    {
+        "key": "drop_test",
+        "label": "Drop / Impact Simulation",
+        "hint": "Controlled drop onto padded surface to reveal rattles/loose screws/parts.",
+    },
+    {
+        "key": "hinge_stress",
+        "label": "Hinge + Screw Stress Check",
+        "hint": "Open/close 10x, verify hinge tension, screws seated, no wobble.",
+    },
+]
+
+# =============================================================================
+# Metrics helpers (INLINE so no qc.services import problems)
+# =============================================================================
+def _window_start(days: int) -> timezone.datetime:
+    return timezone.now() - timedelta(days=days)
 
 
-# -----------------------
-# Health / API basics
-# -----------------------
+def counts_overview() -> dict:
+    """
+    Dashboard counts:
+    - not inspected: RECEIVED
+    - in progress: QC_IN_PROGRESS
+    - passed: STORE_READY
+    - failed: REWORK / QUARANTINE / RETEST (you can adjust)
+    """
+    qs = Unit.objects.all()
+
+    not_inspected = qs.filter(status="RECEIVED").count()
+    in_progress = qs.filter(status="QC_IN_PROGRESS").count()
+    passed = qs.filter(status="STORE_READY").count()
+    failed = qs.filter(status__in=["REWORK", "QUARANTINE", "RETEST"]).count()
+
+    total = qs.count()
+
+    return {
+        "total": total,
+        "not_inspected": not_inspected,
+        "in_progress": in_progress,
+        "passed": passed,
+        "failed": failed,
+    }
+
+
+def first_pass_yield(days: int = 7) -> dict:
+    """
+    FPY = % of units that PASS on attempt 1 (within time window).
+    """
+    start = _window_start(days)
+
+    first_attempts = (
+        Inspection.objects.filter(attempt_number=1, completed_at__isnull=False, completed_at__gte=start)
+        .values("final_result")
+        .annotate(n=Count("id"))
+    )
+
+    totals = {row["final_result"]: row["n"] for row in first_attempts}
+    passed = totals.get("PASS", 0)
+    failed = totals.get("FAIL", 0)
+    denom = passed + failed
+    rate = (passed / denom * 100.0) if denom else 0.0
+
+    return {"days": days, "passed": passed, "failed": failed, "rate_percent": round(rate, 2)}
+
+
+def avg_qc_time_hours(days: int = 7) -> float:
+    """
+    Average inspection duration (hours) for completed inspections in window.
+    """
+    start = _window_start(days)
+
+    # Django: duration = completed_at - started_at
+    # Use Avg expression on DurationField result.
+    qs = Inspection.objects.filter(completed_at__isnull=False, completed_at__gte=start).annotate(
+        dur=F("completed_at") - F("started_at")
+    )
+
+    avg_dur = qs.aggregate(a=Avg("dur"))["a"]
+    if not avg_dur:
+        return 0.0
+
+    return round(avg_dur.total_seconds() / 3600.0, 2)
+
+
+def urgent_sla_breaches(hours_threshold: int = 6) -> int:
+    """
+    URGENT SLA breach:
+    URGENT units not STORE_READY after X hours since received.
+    """
+    cutoff = timezone.now() - timedelta(hours=hours_threshold)
+    return Unit.objects.filter(priority="URGENT").exclude(status="STORE_READY").filter(received_at__lte=cutoff).count()
+
+
+def auto_flag(defect_threshold_percent: float = 10.0, days: int = 7, min_sample: int = 10) -> None:
+    """
+    Auto-create QualityFlag records when defect rate exceeds threshold.
+    Defect rate defined as % of inspections that ended FAIL.
+
+    Flags created for:
+      - MODEL  (Unit.frame_model)
+      - LAB    (Unit.lab)
+
+    Safe to run repeatedly (idempotent-ish: won't create duplicates for same window/type/key).
+    """
+    window_start = _window_start(days)
+    window_end = timezone.now()
+
+    inspections = (
+        Inspection.objects.filter(completed_at__isnull=False, completed_at__gte=window_start)
+        .select_related("unit")
+        .only("id", "final_result", "unit__frame_model", "unit__lab")
+    )
+
+    # Aggregate by model
+    by_model = {}
+    by_lab = {}
+
+    for ins in inspections:
+        model = (ins.unit.frame_model or "").strip() or "UNKNOWN"
+        lab = (ins.unit.lab or "").strip() or "UNKNOWN"
+
+        by_model.setdefault(model, {"total": 0, "fail": 0})
+        by_lab.setdefault(lab, {"total": 0, "fail": 0})
+
+        by_model[model]["total"] += 1
+        by_lab[lab]["total"] += 1
+
+        if ins.final_result == "FAIL":
+            by_model[model]["fail"] += 1
+            by_lab[lab]["fail"] += 1
+
+    def maybe_create(flag_type: str, key: str, total: int, fail: int):
+        if total < min_sample:
+            return
+        rate = (fail / total) * 100.0
+        if rate < defect_threshold_percent:
+            return
+
+        exists = QualityFlag.objects.filter(
+            flag_type=flag_type,
+            flag_key=key,
+            window_start=window_start,
+            window_end=window_end,
+        ).exists()
+        if exists:
+            return
+
+        QualityFlag.objects.create(
+            flag_type=flag_type,
+            flag_key=key,
+            window_start=window_start,
+            window_end=window_end,
+            sample_size=total,
+            defect_rate=rate,
+            threshold=defect_threshold_percent,
+            is_active=True,
+        )
+
+    for model, d in by_model.items():
+        maybe_create("MODEL", model, d["total"], d["fail"])
+
+    for lab, d in by_lab.items():
+        maybe_create("LAB", lab, d["total"], d["fail"])
+
+
+# =============================================================================
+# Health
+# =============================================================================
 def health(request: HttpRequest):
     return JsonResponse({"ok": True, "message": "QC service running"})
 
 
-# -----------------------
+# =============================================================================
 # Home + UI shell
-# -----------------------
+# =============================================================================
 @login_required
 def home(request: HttpRequest):
     return redirect("ui_dashboard")
@@ -71,20 +228,20 @@ def ui_root(request: HttpRequest):
     return redirect("ui_dashboard")
 
 
-# -----------------------
+# =============================================================================
 # Dashboard
-# -----------------------
+# =============================================================================
 @login_required
 def ui_dashboard(request: HttpRequest):
     """
     Dashboard:
     - counts: not inspected / in progress / passed / failed
-    - First Pass Yield
+    - FPY
     - avg QC time
     - urgent SLA breaches
     - active quality flags
     """
-    # run auto-flag calculation (dashboard should never crash)
+    # safe: must never break dashboard
     try:
         auto_flag(defect_threshold_percent=10.0, days=7, min_sample=10)
     except Exception:
@@ -107,14 +264,11 @@ def ui_dashboard(request: HttpRequest):
     return render(request, "qc/dashboard.html", context)
 
 
-# -----------------------
+# =============================================================================
 # Frames list
-# -----------------------
+# =============================================================================
 @login_required
 def frames_list(request: HttpRequest):
-    """
-    Frames/Units list page
-    """
     status = request.GET.get("status", "").strip()
     q = request.GET.get("q", "").strip()
 
@@ -133,9 +287,9 @@ def frames_list(request: HttpRequest):
     return render(request, "qc/frames_list.html", context)
 
 
-# -----------------------
+# =============================================================================
 # Import template download/upload
-# -----------------------
+# =============================================================================
 @login_required
 def import_frames_page(request: HttpRequest):
     return render(request, "qc/import_frames.html")
@@ -144,7 +298,7 @@ def import_frames_page(request: HttpRequest):
 @login_required
 def download_frames_template(request: HttpRequest):
     """
-    CSV template for uploads:
+    CSV template:
     unit_id,order_id,frame_model,lab,priority,status
     """
     buf = io.StringIO()
@@ -161,9 +315,6 @@ def download_frames_template(request: HttpRequest):
 @login_required
 @transaction.atomic
 def upload_frames_csv(request: HttpRequest):
-    """
-    Accept CSV upload and upsert Units.
-    """
     if request.method != "POST":
         return redirect("import_frames_page")
 
@@ -209,9 +360,9 @@ def upload_frames_csv(request: HttpRequest):
     return redirect("frames_list")
 
 
-# -----------------------
-# Inspection wizard (4-step deep cosmetic process)
-# -----------------------
+# =============================================================================
+# Inspection wizard (4-step deep cosmetic)
+# =============================================================================
 @login_required
 def start_inspection(request: HttpRequest, unit_id: str):
     unit = get_object_or_404(Unit, unit_id=unit_id)
@@ -231,7 +382,7 @@ def start_inspection(request: HttpRequest, unit_id: str):
     unit.status = "QC_IN_PROGRESS"
     unit.save(update_fields=["status"])
 
-    # Create stage placeholders for 4-stage process
+    # 4 stage placeholders
     for stage in ["INTAKE", "COSMETIC", "FIT", "DECISION"]:
         InspectionStageResult.objects.create(
             inspection=inspection,
@@ -253,7 +404,7 @@ def inspection_wizard(request: HttpRequest, inspection_id: int):
     intake = stage_results.get("INTAKE")
     cosmetic = stage_results.get("COSMETIC")
     fit = stage_results.get("FIT")
-    decision = stage_results.get("DECISION")  # kept for template symmetry (not edited directly)
+    decision = stage_results.get("DECISION")  # kept for template symmetry
 
     training_mode = inspection.training_mode_used
 
@@ -313,7 +464,7 @@ def inspection_wizard(request: HttpRequest, inspection_id: int):
                 sr.save()
 
         elif action == "finalize":
-            final = request.POST.get("final_result", "PASS").upper()
+            final = (request.POST.get("final_result", "PASS") or "PASS").upper()
             inspection.final_result = final
             inspection.completed_at = timezone.now()
             inspection.save(update_fields=["final_result", "completed_at"])
@@ -359,9 +510,9 @@ def inspection_wizard(request: HttpRequest, inspection_id: int):
     return render(request, "qc/inspection_wizard.html", context)
 
 
-# -----------------------
+# =============================================================================
 # Complaints module (restored)
-# -----------------------
+# =============================================================================
 @login_required
 def complaints_list(request: HttpRequest):
     status = request.GET.get("status", "").strip()
