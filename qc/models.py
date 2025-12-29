@@ -1,78 +1,142 @@
 from django.db import models
+from django.contrib.auth.models import User
 
 
-class Store(models.Model):
-    name = models.CharField(max_length=100, unique=True)
+class Unit(models.Model):
+    unit_id = models.CharField(max_length=64, unique=True)
+    order_id = models.CharField(max_length=64, blank=True, null=True)
+    frame_model = models.CharField(max_length=128)
+    lab = models.CharField(max_length=128)
+
+    priority = models.CharField(
+        max_length=16,
+        choices=[("NORMAL", "NORMAL"), ("URGENT", "URGENT")],
+        default="NORMAL"
+    )
+
+    status = models.CharField(
+        max_length=32,
+        choices=[
+            ("RECEIVED", "RECEIVED"),
+            ("QC_IN_PROGRESS", "QC_IN_PROGRESS"),
+            ("REWORK", "REWORK"),
+            ("RETEST", "RETEST"),
+            ("STORE_READY", "STORE_READY"),
+            ("QUARANTINE", "QUARANTINE"),
+        ],
+        default="RECEIVED"
+    )
+
+    received_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return self.name
+        return self.unit_id
 
 
-class FrameStyle(models.Model):
-    style_code = models.CharField(max_length=50, unique=True)
-    supplier = models.CharField(max_length=120, blank=True, default="")
+class Inspection(models.Model):
+    unit = models.ForeignKey(Unit, on_delete=models.CASCADE)
+    attempt_number = models.PositiveIntegerField(default=1)
+    started_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+
+    final_result = models.CharField(
+        max_length=8,
+        choices=[("PASS", "PASS"), ("FAIL", "FAIL")],
+        blank=True,
+        null=True
+    )
+
+    training_mode_used = models.BooleanField(default=False)
+    tech_user = models.ForeignKey(User, on_delete=models.PROTECT)
 
     def __str__(self):
-        return self.style_code
+        return f"{self.unit.unit_id} attempt {self.attempt_number}"
 
 
-class FrameVariant(models.Model):
-    STATUS_CHOICES = [
-        ("OK", "OK (on shelf)"),
-        ("HOLD", "Hold (watch)"),
-        ("OFF", "Off shelf"),
-    ]
+class InspectionStageResult(models.Model):
+    inspection = models.ForeignKey(Inspection, on_delete=models.CASCADE)
 
-    style = models.ForeignKey(FrameStyle, on_delete=models.CASCADE, related_name="frames")
+    stage = models.CharField(
+        max_length=32,
+        choices=[
+            ("INTAKE", "INTAKE"),
+            ("COSMETIC", "COSMETIC"),
+            ("RX", "RX"),
+            ("FIT", "FIT"),
+            ("FINAL_PREP", "FINAL_PREP"),
+            ("DECISION", "DECISION"),
+        ]
+    )
 
-    # ✅ THIS fixes your error:
-    sku = models.CharField(max_length=80, unique=True)
+    status = models.CharField(
+        max_length=8,
+        choices=[("PASS", "PASS"), ("FAIL", "FAIL")]
+    )
 
-    color = models.CharField(max_length=50, blank=True, default="")
-    size = models.CharField(max_length=50, blank=True, default="")
+    notes = models.TextField(blank=True)
+    data = models.JSONField(blank=True, null=True)
 
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="OK")
-    qc_score_cached = models.IntegerField(default=0)
+    started_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(auto_now=True)
+
+
+class Defect(models.Model):
+    stage_result = models.ForeignKey(InspectionStageResult, on_delete=models.CASCADE)
+    category = models.CharField(max_length=32)
+    reason_code = models.CharField(max_length=64)
+
+    severity = models.CharField(
+        max_length=8,
+        choices=[("LOW", "LOW"), ("MED", "MED"), ("HIGH", "HIGH")]
+    )
+
+    notes = models.TextField(blank=True)
+
+
+class DefectPhoto(models.Model):
+    defect = models.ForeignKey(Defect, on_delete=models.CASCADE)
+    image = models.ImageField(upload_to="qc_defects/")
+    annotation_json = models.JSONField(blank=True, null=True)
+
+
+class ReworkTicket(models.Model):
+    unit = models.ForeignKey(Unit, on_delete=models.CASCADE)
+    inspection = models.ForeignKey(Inspection, on_delete=models.CASCADE)
+
+    failed_stage = models.CharField(max_length=32)
+    reason_summary = models.TextField()
+
+    assigned_to = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True)
+
+    status = models.CharField(
+        max_length=16,
+        choices=[
+            ("OPEN", "OPEN"),
+            ("IN_PROGRESS", "IN_PROGRESS"),
+            ("DONE", "DONE"),
+        ],
+        default="OPEN"
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"{self.style.style_code} - {self.sku}"
+    closed_at = models.DateTimeField(blank=True, null=True)
 
 
-class Complaint(models.Model):
-    SEVERITY_CHOICES = [
-        ("LOW", "Low"),
-        ("MED", "Medium"),
-        ("HIGH", "High"),
-    ]
+class QualityFlag(models.Model):
+    flag_type = models.CharField(
+        max_length=16,
+        choices=[("MODEL", "MODEL"), ("LAB", "LAB")]
+    )
 
-    FAILURE_CHOICES = [
-        ("HINGE", "Hinge"),
-        ("ARM", "Arm/Temple"),
-        ("BRIDGE", "Bridge"),
-        ("SCREW", "Screw"),
-        ("LENS", "Lens Issue"),
-        ("OTHER", "Other"),
-    ]
+    flag_key = models.CharField(max_length=128)
+    window_start = models.DateTimeField()
+    window_end = models.DateTimeField()
 
-    variant = models.ForeignKey(FrameVariant, on_delete=models.CASCADE, related_name="complaints")
-    store = models.ForeignKey(Store, on_delete=models.SET_NULL, null=True, blank=True)
+    sample_size = models.PositiveIntegerField()
+    defect_rate = models.FloatField()
+    threshold = models.FloatField()
 
-    failure_type = models.CharField(max_length=20, choices=FAILURE_CHOICES, default="OTHER")
-    severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES, default="LOW")
-    notes = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"Complaint: {self.variant.sku} ({self.failure_type})"
-
-
-class ComplaintAttachment(models.Model):
-    complaint = models.ForeignKey(Complaint, on_delete=models.CASCADE, related_name="attachments")
-    file = models.FileField(upload_to="complaints/")
-    uploaded_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"Attachment for complaint {self.complaint_id}"
+    resolved_at = models.DateTimeField(blank=True, null=True)
