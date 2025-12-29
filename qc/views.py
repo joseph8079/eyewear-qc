@@ -2,8 +2,8 @@ import csv
 import io
 import json
 
-from django.http import JsonResponse, HttpResponse
-from django.shortcuts import render, redirect
+from django.http import JsonResponse
+from django.shortcuts import render
 from django.utils.timezone import now, timedelta
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
@@ -18,23 +18,40 @@ from .models import (
 
 
 # ============================================================
-# PAGES (HTML)
+# ROOT + HEALTH (ALWAYS SAFE FOR RENDER HEALTH CHECKS)
 # ============================================================
 
 def home(request):
-    # Public landing (no auth required)
+    """
+    Keep root route extremely stable:
+    - Works for GET and HEAD
+    - No templates
+    - Prevents Render health checks from failing
+    """
+    return JsonResponse({"ok": True, "message": "QC service running"})
+
+
+def health(request):
+    return JsonResponse({"ok": True, "service": "qc"})
+
+
+# ============================================================
+# UI PAGES (HTML)
+# ============================================================
+
+@login_required
+def ui_home(request):
     return render(request, "qc/home.html")
 
 
 @login_required
 def legacy_frames_page(request):
-    # Basic frames listing page. Later connect this to real Unit data.
+    # Later you can bind this to real Unit data
     return render(request, "qc/frames.html")
 
 
 @login_required
 def legacy_complaints_page(request):
-    # Legacy page placeholder.
     return render(request, "qc/complaints.html")
 
 
@@ -51,7 +68,6 @@ def legacy_import_frames_page(request):
     if request.method == "GET":
         return render(request, "qc/import_frames.html")
 
-    # POST upload
     uploaded = request.FILES.get("file")
     if not uploaded:
         return render(request, "qc/import_frames.html", {"error": "No file uploaded"})
@@ -66,8 +82,7 @@ def legacy_import_frames_page(request):
         skipped = 0
 
         for row in reader:
-            # normalize keys
-            norm = { (k or "").strip().lower(): (v or "").strip() for k, v in row.items() }
+            norm = {(k or "").strip().lower(): (v or "").strip() for k, v in row.items()}
 
             unit_id = norm.get("unit_id") or norm.get("unit") or norm.get("id")
             if not unit_id:
@@ -78,7 +93,7 @@ def legacy_import_frames_page(request):
                 "order_id": norm.get("order_id") or norm.get("order"),
                 "frame_model": norm.get("frame_model") or norm.get("model") or "",
                 "lab": norm.get("lab") or "",
-                "priority": (norm.get("priority") or "NORMAL").upper() if (norm.get("priority") or "") else "NORMAL",
+                "priority": (norm.get("priority") or "NORMAL").upper(),
                 "status": "RECEIVED",
             }
 
@@ -87,7 +102,6 @@ def legacy_import_frames_page(request):
             if was_created:
                 created += 1
             else:
-                # update only if we got a value
                 changed = False
                 for field in ["order_id", "frame_model", "lab", "priority"]:
                     v = defaults.get(field)
@@ -107,10 +121,6 @@ def legacy_import_frames_page(request):
         return render(request, "qc/import_frames.html", {"error": f"Upload failed: {e}"})
 
 
-def health(request):
-    return JsonResponse({"ok": True, "service": "qc"})
-
-
 # ============================================================
 # INLINE METRICS (NO qc.services PACKAGE)
 # ============================================================
@@ -128,7 +138,7 @@ def _first_pass_yield(days=7):
     first_pass = Inspection.objects.filter(
         started_at__gte=start,
         attempt_number=1,
-        final_result="PASS"
+        final_result="PASS",
     )
 
     reworked_unit_ids = set(
@@ -159,6 +169,9 @@ def _bottleneck_stage(days=7):
 
     durations = {}
     for r in qs:
+        # started_at may be null depending on your model defaults
+        if not r.started_at or not r.completed_at:
+            continue
         dur = (r.completed_at - r.started_at).total_seconds()
         durations.setdefault(r.stage, []).append(dur)
 
@@ -196,28 +209,32 @@ def legacy_complaints(request):
 
     if request.method == "POST":
         payload = json.loads(request.body.decode("utf-8") or "{}")
-        return JsonResponse({
-            "legacy": True,
-            "created": True,
-            "complaint": {
-                "id": 1,
-                "data": payload,
-                "note": "Legacy stub. Old Complaint models removed."
+        return JsonResponse(
+            {
+                "legacy": True,
+                "created": True,
+                "complaint": {
+                    "id": 1,
+                    "data": payload,
+                    "note": "Legacy stub. Old Complaint models removed.",
+                },
             }
-        })
+        )
 
     return JsonResponse({"error": "method not allowed"}, status=405)
 
 
 @login_required
 def legacy_complaint_detail(request, complaint_id: int):
-    return JsonResponse({
-        "legacy": True,
-        "complaint": {
-            "id": complaint_id,
-            "note": "Legacy stub. Old Complaint models removed."
+    return JsonResponse(
+        {
+            "legacy": True,
+            "complaint": {
+                "id": complaint_id,
+                "note": "Legacy stub. Old Complaint models removed.",
+            },
         }
-    })
+    )
 
 
 @csrf_exempt
@@ -227,11 +244,9 @@ def legacy_complaint_attachments(request, complaint_id: int):
         return JsonResponse({"legacy": True, "items": []})
 
     if request.method == "POST":
-        return JsonResponse({
-            "legacy": True,
-            "uploaded": True,
-            "note": "Legacy stub. Old Attachment models removed."
-        })
+        return JsonResponse(
+            {"legacy": True, "uploaded": True, "note": "Legacy stub. Old Attachment models removed."}
+        )
 
     return JsonResponse({"error": "method not allowed"}, status=405)
 
@@ -291,12 +306,14 @@ def start_inspection(request):
         training_mode_used=bool(payload.get("training_mode_used", False)),
     )
 
-    return JsonResponse({
-        "inspection_id": inspection.id,
-        "unit_id": unit.unit_id,
-        "attempt_number": attempt_number,
-        "created_unit": created,
-    })
+    return JsonResponse(
+        {
+            "inspection_id": inspection.id,
+            "unit_id": unit.unit_id,
+            "attempt_number": attempt_number,
+            "created_unit": created,
+        }
+    )
 
 
 @csrf_exempt
@@ -343,7 +360,7 @@ def complete_stage(request):
             "notes": payload.get("notes", ""),
             "data": payload.get("data"),
             "completed_at": now(),
-        }
+        },
     )
 
     if status == "FAIL":
@@ -369,20 +386,24 @@ def complete_stage(request):
         inspection.unit.status = "QUARANTINE" if defect.severity == "HIGH" else "REWORK"
         inspection.unit.save()
 
-        return JsonResponse({
+        return JsonResponse(
+            {
+                "stage_result_id": stage_result.id,
+                "inspection_id": inspection.id,
+                "stage": stage,
+                "status": status,
+                "defect_id": defect.id,
+            }
+        )
+
+    return JsonResponse(
+        {
             "stage_result_id": stage_result.id,
             "inspection_id": inspection.id,
             "stage": stage,
             "status": status,
-            "defect_id": defect.id,
-        })
-
-    return JsonResponse({
-        "stage_result_id": stage_result.id,
-        "inspection_id": inspection.id,
-        "stage": stage,
-        "status": status,
-    })
+        }
+    )
 
 
 @csrf_exempt
@@ -429,12 +450,14 @@ def finalize_inspection(request):
 
     inspection.save()
 
-    return JsonResponse({
-        "inspection_id": inspection.id,
-        "final_result": inspection.final_result,
-        "unit_status": inspection.unit.status,
-        "stages": stage_map,
-    })
+    return JsonResponse(
+        {
+            "inspection_id": inspection.id,
+            "final_result": inspection.final_result,
+            "unit_status": inspection.unit.status,
+            "stages": stage_map,
+        }
+    )
 
 
 @login_required
@@ -447,11 +470,12 @@ def dashboard(request):
     except ValueError:
         days = 7
 
-    return JsonResponse({
-        "days": days,
-        "pass_rate": _pass_rate(days),
-        "first_pass_yield": _first_pass_yield(days),
-        "avg_qc_time_minutes": _avg_qc_time(days),
-        "bottleneck_stage": _bottleneck_stage(days),
-    })
-
+    return JsonResponse(
+        {
+            "days": days,
+            "pass_rate": _pass_rate(days),
+            "first_pass_yield": _first_pass_yield(days),
+            "avg_qc_time_minutes": _avg_qc_time(days),
+            "bottleneck_stage": _bottleneck_stage(days),
+        }
+    )
