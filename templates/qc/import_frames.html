@@ -29,4 +29,17 @@
     </form>
   </div>
 </div>
+{% extends "qc/base.html" %}
+{% block content %}
+<div class="card">
+    <h2>Import Frames</h2>
+    <p class="muted">Upload CSV to create incoming QC units.</p>
+
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="file" name="file">
+        <br><br>
+        <button class="btn" type="submit">Upload</button>
+    </form>
+</div>
 {% endblock %}

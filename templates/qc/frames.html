@@ -1,0 +1,22 @@
+{% extends "qc/base.html" %}
+{% block content %}
+<div class="card">
+    <h2>Frames</h2>
+    <p class="muted">This will show incoming units ready for QC.</p>
+
+    <table width="100%" border="0" cellpadding="8">
+        <tr>
+            <th align="left">Unit</th>
+            <th align="left">Model</th>
+            <th align="left">Status</th>
+            <th></th>
+        </tr>
+        <tr>
+            <td>U-001</td>
+            <td>Demo Frame</td>
+            <td>QC Pending</td>
+            <td><a class="btn" href="#">Start QC</a></td>
+        </tr>
+    </table>
+</div>
+{% endblock %}

@@ -1,6 +1,9 @@
-
+import csv
+import io
 import json
-from django.http import JsonResponse
+
+from django.http import JsonResponse, HttpResponse
+from django.shortcuts import render, redirect
 from django.utils.timezone import now, timedelta
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
@@ -13,20 +16,105 @@ from .models import (
     ReworkTicket,
 )
 
-# -----------------------------
-# HOME + HEALTH (KEEP OLD URLS WORKING)
-# -----------------------------
+
+# ============================================================
+# PAGES (HTML)
+# ============================================================
+
 def home(request):
-    return JsonResponse({"ok": True, "message": "QC service running"})
+    # Public landing (no auth required)
+    return render(request, "qc/home.html")
+
+
+@login_required
+def legacy_frames_page(request):
+    # Basic frames listing page. Later connect this to real Unit data.
+    return render(request, "qc/frames.html")
+
+
+@login_required
+def legacy_complaints_page(request):
+    # Legacy page placeholder.
+    return render(request, "qc/complaints.html")
+
+
+@login_required
+@csrf_exempt
+def legacy_import_frames_page(request):
+    """
+    Basic CSV uploader.
+    Expected columns (any casing ok, extra columns ignored):
+      unit_id, order_id, frame_model, lab, priority
+
+    If unit_id missing in a row, row is skipped.
+    """
+    if request.method == "GET":
+        return render(request, "qc/import_frames.html")
+
+    # POST upload
+    uploaded = request.FILES.get("file")
+    if not uploaded:
+        return render(request, "qc/import_frames.html", {"error": "No file uploaded"})
+
+    try:
+        raw = uploaded.read().decode("utf-8", errors="ignore")
+        f = io.StringIO(raw)
+        reader = csv.DictReader(f)
+
+        created = 0
+        updated = 0
+        skipped = 0
+
+        for row in reader:
+            # normalize keys
+            norm = { (k or "").strip().lower(): (v or "").strip() for k, v in row.items() }
+
+            unit_id = norm.get("unit_id") or norm.get("unit") or norm.get("id")
+            if not unit_id:
+                skipped += 1
+                continue
+
+            defaults = {
+                "order_id": norm.get("order_id") or norm.get("order"),
+                "frame_model": norm.get("frame_model") or norm.get("model") or "",
+                "lab": norm.get("lab") or "",
+                "priority": (norm.get("priority") or "NORMAL").upper() if (norm.get("priority") or "") else "NORMAL",
+                "status": "RECEIVED",
+            }
+
+            unit, was_created = Unit.objects.get_or_create(unit_id=unit_id, defaults=defaults)
+
+            if was_created:
+                created += 1
+            else:
+                # update only if we got a value
+                changed = False
+                for field in ["order_id", "frame_model", "lab", "priority"]:
+                    v = defaults.get(field)
+                    if v:
+                        setattr(unit, field, v)
+                        changed = True
+                if changed:
+                    unit.save()
+                    updated += 1
+
+        return render(
+            request,
+            "qc/import_frames.html",
+            {"success": f"Import complete: created {created}, updated {updated}, skipped {skipped}"},
+        )
+    except Exception as e:
+        return render(request, "qc/import_frames.html", {"error": f"Upload failed: {e}"})
 
 
 def health(request):
     return JsonResponse({"ok": True, "service": "qc"})
 
 
-# -----------------------------
-# SIMPLE METRICS (INLINE)
-# -----------------------------
+# ============================================================
+# INLINE METRICS (NO qc.services PACKAGE)
+# ============================================================
+
 def _pass_rate(days=7):
     start = now() - timedelta(days=days)
     total = Inspection.objects.filter(started_at__gte=start).count()
@@ -81,9 +169,10 @@ def _bottleneck_stage(days=7):
     return max(avg, key=avg.get)
 
 
-# -----------------------------------
-# LEGACY ENDPOINTS (SAFE STUBS)
-# -----------------------------------
+# ============================================================
+# LEGACY API ENDPOINTS (SAFE STUBS)
+# ============================================================
+
 @login_required
 def legacy_stores(request):
     return JsonResponse({"legacy": True, "items": []})
@@ -147,12 +236,24 @@ def legacy_complaint_attachments(request, complaint_id: int):
     return JsonResponse({"error": "method not allowed"}, status=405)
 
 
-# -----------------------------------
-# QC v2.1 ENDPOINTS
-# -----------------------------------
+# ============================================================
+# QC v2.1 API ENDPOINTS
+# ============================================================
+
 @csrf_exempt
 @login_required
 def start_inspection(request):
+    """
+    POST JSON:
+    {
+      "unit_id": "U123",
+      "order_id": "O999",
+      "frame_model": "Rayban 123",
+      "lab": "LabA",
+      "priority": "NORMAL" | "URGENT",
+      "training_mode_used": true/false
+    }
+    """
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
 
@@ -176,6 +277,7 @@ def start_inspection(request):
     for field in ["order_id", "frame_model", "lab", "priority"]:
         if payload.get(field):
             setattr(unit, field, payload[field])
+
     unit.status = "QC_IN_PROGRESS"
     unit.save()
 
@@ -200,6 +302,22 @@ def start_inspection(request):
 @csrf_exempt
 @login_required
 def complete_stage(request):
+    """
+    POST JSON:
+    {
+      "inspection_id": 123,
+      "stage": "INTAKE"|"COSMETIC"|"RX"|"FIT"|"FINAL_PREP"|"DECISION",
+      "status": "PASS"|"FAIL",
+      "notes": "text",
+      "data": {...},
+      "defect": {  # required if FAIL
+        "category": "COSMETIC",
+        "reason_code": "LENS_SCRATCH",
+        "severity": "LOW"|"MED"|"HIGH",
+        "notes": "optional"
+      }
+    }
+    """
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
 
@@ -251,6 +369,14 @@ def complete_stage(request):
         inspection.unit.status = "QUARANTINE" if defect.severity == "HIGH" else "REWORK"
         inspection.unit.save()
 
+        return JsonResponse({
+            "stage_result_id": stage_result.id,
+            "inspection_id": inspection.id,
+            "stage": stage,
+            "status": status,
+            "defect_id": defect.id,
+        })
+
     return JsonResponse({
         "stage_result_id": stage_result.id,
         "inspection_id": inspection.id,
@@ -262,6 +388,13 @@ def complete_stage(request):
 @csrf_exempt
 @login_required
 def finalize_inspection(request):
+    """
+    POST JSON: { "inspection_id": 123 }
+
+    Rule:
+    - If INTAKE+COSMETIC+RX+FIT+FINAL_PREP are all PASS => PASS and unit STORE_READY
+    - Else FAIL (unit stays REWORK/QUARANTINE/QC_IN_PROGRESS)
+    """
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
 
@@ -306,6 +439,9 @@ def finalize_inspection(request):
 
 @login_required
 def dashboard(request):
+    """
+    GET /api/qc/dashboard/?days=7
+    """
     try:
         days = int(request.GET.get("days", "7"))
     except ValueError:
@@ -318,25 +454,4 @@ def dashboard(request):
         "avg_qc_time_minutes": _avg_qc_time(days),
         "bottleneck_stage": _bottleneck_stage(days),
     })
-def legacy_frames_page(request):
-    return JsonResponse({
-        "ok": True,
-        "page": "frames",
-        "note": "Legacy page placeholder. UI will be migrated to QC v2.1."
-    })
 
-
-def legacy_complaints_page(request):
-    return JsonResponse({
-        "ok": True,
-        "page": "complaints",
-        "note": "Legacy page placeholder. Complaints module replaced by QC workflow."
-    })
-
-
-def legacy_import_frames_page(request):
-    return JsonResponse({
-        "ok": True,
-        "page": "import/frames",
-        "note": "Legacy import placeholder. Add import tool later if needed."
-    })
