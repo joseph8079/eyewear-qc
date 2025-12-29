@@ -3,8 +3,9 @@ import io
 import json
 
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render, redirect
+from django.template import TemplateDoesNotExist
 from django.utils.timezone import now, timedelta
 from django.views.decorators.csrf import csrf_exempt
 
@@ -15,6 +16,7 @@ from .models import (
     Defect,
     ReworkTicket,
 )
+
 
 # ============================================================
 # HEALTH (Render polls /health/)
@@ -30,22 +32,73 @@ def health(request):
 
 @login_required
 def ui_home(request):
-    # landing goes to dashboard
     return redirect("/ui/dashboard/")
 
 
 @login_required
 def ui_dashboard(request):
-    # Dashboard pulls data server-side for now (simple & stable)
+    """
+    UI dashboard page.
+    - Safe: will NOT 500 if DB isn't ready or templates are missing.
+    """
     days = 7
-    context = _build_dashboard_context(days=days)
-    return render(request, "qc/dashboard.html", context)
+
+    # Build metrics (never crash)
+    try:
+        context = _build_dashboard_context(days=days)
+    except Exception:
+        context = {
+            "days": days,
+            "pass_rate": 0,
+            "first_pass_yield": 0,
+            "avg_qc_time_minutes": 0,
+            "bottleneck_stage": "—",
+            "alerts": ["Dashboard running in safe mode (DB/models not ready yet)."],
+        }
+
+    # Render template if it exists; otherwise fallback HTML
+    try:
+        return render(request, "qc/dashboard.html", context)
+    except TemplateDoesNotExist:
+        html = f"""
+        <!doctype html>
+        <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>QC Dashboard</title>
+        </head>
+        <body style="font-family:Arial;padding:20px;background:#f6f7fb;">
+          <h2>QC Dashboard (Safe Mode)</h2>
+          <p style="color:#6b7280;">
+            Missing template <code>templates/qc/dashboard.html</code>.
+            The app is running, but UI templates are not deployed yet.
+          </p>
+          <div style="background:#fff;padding:12px;border-radius:10px;">
+            <b>Last {context.get("days")} days</b><br/><br/>
+            <b>Pass Rate:</b> {context.get("pass_rate")}%<br/>
+            <b>First Pass Yield:</b> {context.get("first_pass_yield")}%<br/>
+            <b>Avg QC Time:</b> {context.get("avg_qc_time_minutes")} min<br/>
+            <b>Bottleneck:</b> {context.get("bottleneck_stage")}<br/>
+          </div>
+          <p style="margin-top:14px;">
+            <a href="/frames/">Frames</a> |
+            <a href="/import/frames/">Import</a> |
+            <a href="/admin/">Admin</a> |
+            <a href="/health/">Health</a>
+          </p>
+        </body>
+        </html>
+        """
+        return HttpResponse(html)
 
 
 @login_required
 def ui_frames(request):
-    # Show newest units first
-    units = Unit.objects.all().order_by("-id")[:200]
+    # Latest units first (limit 200 for speed)
+    try:
+        units = Unit.objects.all().order_by("-id")[:200]
+    except Exception:
+        units = []
     return render(request, "qc/frames.html", {"units": units})
 
 
@@ -89,6 +142,7 @@ def ui_import_frames(request):
             }
 
             unit, was_created = Unit.objects.get_or_create(unit_id=unit_id, defaults=defaults)
+
             if was_created:
                 created += 1
             else:
@@ -121,7 +175,7 @@ def ui_qc_wizard(request):
 
 
 # ============================================================
-# DASHBOARD METRICS (INLINE)
+# DASHBOARD METRICS (INLINE, NO qc.services PACKAGE)
 # ============================================================
 
 def _pass_rate(days=7):
@@ -133,10 +187,18 @@ def _pass_rate(days=7):
 
 def _first_pass_yield(days=7):
     start = now() - timedelta(days=days)
-    first_pass = Inspection.objects.filter(started_at__gte=start, attempt_number=1, final_result="PASS")
-    reworked_unit_ids = set(
-        ReworkTicket.objects.filter(inspection__in=first_pass).values_list("unit_id", flat=True)
+
+    first_pass = Inspection.objects.filter(
+        started_at__gte=start,
+        attempt_number=1,
+        final_result="PASS",
     )
+
+    reworked_unit_ids = set(
+        ReworkTicket.objects.filter(inspection__in=first_pass)
+        .values_list("unit_id", flat=True)
+    )
+
     fp_count = first_pass.exclude(unit_id__in=reworked_unit_ids).count()
     total = first_pass.count()
     return 0 if total == 0 else round((fp_count / total) * 100, 2)
@@ -145,6 +207,7 @@ def _first_pass_yield(days=7):
 def _avg_qc_time_minutes(days=7):
     start = now() - timedelta(days=days)
     qs = Inspection.objects.filter(started_at__gte=start, completed_at__isnull=False)
+
     secs = [
         (i.completed_at - i.started_at).total_seconds()
         for i in qs
@@ -172,7 +235,6 @@ def _bottleneck_stage(days=7):
 
 
 def _build_dashboard_context(days=7):
-    # Simple “alerts” scaffolding (we’ll replace with real defect threshold + SLA next)
     return {
         "days": days,
         "pass_rate": _pass_rate(days),
@@ -226,7 +288,12 @@ def start_inspection(request):
     )
 
     return JsonResponse(
-        {"inspection_id": inspection.id, "unit_id": unit.unit_id, "attempt_number": attempt_number, "created_unit": created}
+        {
+            "inspection_id": inspection.id,
+            "unit_id": unit.unit_id,
+            "attempt_number": attempt_number,
+            "created_unit": created,
+        }
     )
 
 
@@ -322,12 +389,18 @@ def finalize_inspection(request):
 
     inspection.save()
 
-    return JsonResponse({"inspection_id": inspection.id, "final_result": inspection.final_result, "unit_status": inspection.unit.status})
+    return JsonResponse(
+        {
+            "inspection_id": inspection.id,
+            "final_result": inspection.final_result,
+            "unit_status": inspection.unit.status,
+        }
+    )
 
 
 @login_required
 def dashboard(request):
-    # API version (JSON) — used later by JS; UI uses server-side for now
+    # JSON dashboard endpoint (used later by JS)
     try:
         days = int(request.GET.get("days", "7"))
     except ValueError:
@@ -342,4 +415,3 @@ def dashboard(request):
             "bottleneck_stage": _bottleneck_stage(days),
         }
     )
-

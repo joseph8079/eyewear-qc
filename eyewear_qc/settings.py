@@ -1,29 +1,28 @@
 from pathlib import Path
 import os
-import dj_database_url
 
-# -------------------------------------------------
-# BASE
-# -------------------------------------------------
+import dj_database_url
+from dotenv import load_dotenv
+
+load_dotenv()
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.environ.get(
-    "SECRET_KEY",
-    "unsafe-dev-secret-key-change-me"
-)
+# SECURITY
+SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-me")
+DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
-DEBUG = os.environ.get("DEBUG", "False") == "True"
+ALLOWED_HOSTS = ["*"]
 
-ALLOWED_HOSTS = os.environ.get(
-    "ALLOWED_HOSTS",
-    "*"
-).split(",")
+# If you want to lock it down later, replace ALLOWED_HOSTS with:
+# ALLOWED_HOSTS = ["eyewear-qc.onrender.com", "localhost", "127.0.0.1"]
 
-# -------------------------------------------------
+CSRF_TRUSTED_ORIGINS = [
+    "https://eyewear-qc.onrender.com",
+]
+
 # APPLICATIONS
-# -------------------------------------------------
 INSTALLED_APPS = [
-    # Django
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -31,16 +30,14 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 
-    # Local apps
+    # Your app
     "qc",
 ]
 
-# -------------------------------------------------
-# MIDDLEWARE
-# -------------------------------------------------
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -49,11 +46,9 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-# -------------------------------------------------
-# URLS / WSGI
-# -------------------------------------------------
 ROOT_URLCONF = "eyewear_qc.urls"
 
+# ✅ IMPORTANT: this enables templates/qc/*.html
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
@@ -72,78 +67,53 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "eyewear_qc.wsgi.application"
 
-# -------------------------------------------------
 # DATABASE
-# -------------------------------------------------
+# Render provides DATABASE_URL automatically when you attach a Postgres.
 DATABASES = {
     "default": dj_database_url.config(
-        default=os.environ.get(
-            "DATABASE_URL",
-            "sqlite:///" + str(BASE_DIR / "db.sqlite3"),
-        ),
+        default=os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'db.sqlite3'}"),
         conn_max_age=600,
-        ssl_require=False,
+        ssl_require=not DEBUG,
     )
 }
 
-# -------------------------------------------------
-# AUTH
-# -------------------------------------------------
+# PASSWORD VALIDATION
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
-    },
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
-# -------------------------------------------------
-# INTERNATIONALIZATION
-# -------------------------------------------------
 LANGUAGE_CODE = "en-us"
-
 TIME_ZONE = "UTC"
-
 USE_I18N = True
 USE_TZ = True
 
-# -------------------------------------------------
-# STATIC / MEDIA
-# -------------------------------------------------
-STATIC_URL = "/static/"
+# AUTH / LOGIN
+LOGIN_URL = "/accounts/login/"
+LOGIN_REDIRECT_URL = "/ui/"
+LOGOUT_REDIRECT_URL = "/accounts/login/"
+
+# STATIC
+STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-STATICFILES_STORAGE = (
-    "whitenoise.storage.CompressedManifestStaticFilesStorage"
-)
+# WhiteNoise: compressed static files
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    }
+}
 
+# MEDIA (uploads)
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
-# -------------------------------------------------
-# DEFAULT PRIMARY KEY
-# -------------------------------------------------
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# -------------------------------------------------
-# QC CONFIG (OPTIONAL, SAFE DEFAULTS)
-# -------------------------------------------------
-QC_FLAG_LOOKBACK_DAYS = int(os.environ.get("QC_FLAG_LOOKBACK_DAYS", 7))
-QC_FLAG_MIN_SAMPLE = int(os.environ.get("QC_FLAG_MIN_SAMPLE", 20))
-QC_FLAG_DEFECT_RATE_THRESHOLD = float(
-    os.environ.get("QC_FLAG_DEFECT_RATE_THRESHOLD", 0.12)
-)
-
-QC_SLA_URGENT_HOURS = int(os.environ.get("QC_SLA_URGENT_HOURS", 4))
-QC_SLA_STAGE_MAX_HOURS = int(os.environ.get("QC_SLA_STAGE_MAX_HOURS", 2))
-
-QC_TRAINING_INSPECTIONS = int(
-    os.environ.get("QC_TRAINING_INSPECTIONS", 30)
-)
+# Basic security settings (safe defaults on Render)
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "False").lower() == "true"
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
