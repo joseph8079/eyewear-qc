@@ -1,225 +1,319 @@
-from __future__ import annotations
-
-import csv
-import io
-
-from django import forms
-from django.contrib import messages
+import json
+from django.http import JsonResponse
+from django.utils.timezone import now
+from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
-from django.db import transaction
-from django.http import HttpResponse
-from django.shortcuts import get_object_or_404, redirect, render
-from django.utils import timezone
-from django.views.decorators.http import require_http_methods
 
-from .models import Complaint, FrameStyle, FrameVariant, Store
+from .models import (
+    Unit,
+    Inspection,
+    InspectionStageResult,
+    Defect,
+    ReworkTicket,
+)
+from .services.metrics import pass_rate, first_pass_yield, avg_qc_time, bottleneck_stage
 
 
-# -------------------------
-# HOME
-# -------------------------
+# -----------------------------------
+# HEALTH
+# -----------------------------------
+def health(request):
+    return JsonResponse({"ok": True, "service": "qc"})
+
+
+# -----------------------------------
+# LEGACY ENDPOINTS (SAFE STUBS)
+# These prevent crashes while you migrate your frontend.
+# They DO NOT require old models like Store/Complaint.
+# -----------------------------------
+
 @login_required
-def home(request):
-    stats = {
-        "styles": FrameStyle.objects.count(),
-        "variants": FrameVariant.objects.count(),
-        "complaints": Complaint.objects.count(),
+def legacy_stores(request):
+    # Old UI expected a list of stores
+    return JsonResponse({
+        "legacy": True,
+        "items": []
+    })
+
+
+@login_required
+def legacy_frame_styles(request):
+    # Old UI expected styles list
+    return JsonResponse({
+        "legacy": True,
+        "items": []
+    })
+
+
+@login_required
+def legacy_frame_variants(request):
+    # Old UI expected variants list
+    return JsonResponse({
+        "legacy": True,
+        "items": []
+    })
+
+
+@csrf_exempt
+@login_required
+def legacy_complaints(request):
+    # Old UI expected complaints list + create
+    if request.method == "GET":
+        return JsonResponse({"legacy": True, "items": []})
+
+    if request.method == "POST":
+        # Accept and return a fake id so old UI doesn't crash
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+        return JsonResponse({
+            "legacy": True,
+            "created": True,
+            "complaint": {
+                "id": 1,
+                "data": payload,
+                "note": "Legacy endpoint stub. Migrate UI to QC v2.1."
+            }
+        })
+
+    return JsonResponse({"error": "method not allowed"}, status=405)
+
+
+@login_required
+def legacy_complaint_detail(request, complaint_id: int):
+    # Old UI expected complaint detail
+    return JsonResponse({
+        "legacy": True,
+        "complaint": {
+            "id": complaint_id,
+            "note": "Legacy endpoint stub. Complaint models removed."
+        }
+    })
+
+
+@csrf_exempt
+@login_required
+def legacy_complaint_attachments(request, complaint_id: int):
+    # Old UI expected attachment list + upload
+    if request.method == "GET":
+        return JsonResponse({"legacy": True, "items": []})
+
+    if request.method == "POST":
+        return JsonResponse({
+            "legacy": True,
+            "uploaded": True,
+            "note": "Legacy endpoint stub. Attachment models removed."
+        })
+
+    return JsonResponse({"error": "method not allowed"}, status=405)
+
+
+# -----------------------------------
+# QC v2.1 ENDPOINTS (REAL)
+# -----------------------------------
+
+@csrf_exempt
+@login_required
+def start_inspection(request):
+    """
+    POST JSON:
+    {
+      "unit_id": "U123",
+      "order_id": "O999",
+      "frame_model": "Rayban 123",
+      "lab": "LabA",
+      "priority": "NORMAL" | "URGENT",
+      "training_mode_used": true/false
     }
-    return render(request, "qc/home.html", {"stats": stats})
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
 
+    payload = json.loads(request.body.decode("utf-8") or "{}")
 
-# -------------------------
-# FRAMES LIST
-# -------------------------
-@login_required
-def frames_list(request):
-    frames = (
-        FrameVariant.objects
-        .select_related("style")
-        .order_by("-created_at")
-    )
-    return render(request, "qc/frames_list.html", {"frames": frames})
+    unit_id = payload.get("unit_id")
+    if not unit_id:
+        return JsonResponse({"error": "unit_id required"}, status=400)
 
-
-# -------------------------
-# COMPLAINTS LIST
-# -------------------------
-@login_required
-def complaints_list(request):
-    complaints = (
-        Complaint.objects
-        .select_related("variant", "variant__style", "store")
-        .order_by("-created_at")
-    )
-    return render(request, "qc/complaints_list.html", {"complaints": complaints})
-
-
-# =========================
-# FORMS
-# =========================
-class FrameCreateForm(forms.Form):
-    style_code = forms.CharField(max_length=64)
-    supplier = forms.CharField(max_length=255, required=False)
-    sku = forms.CharField(max_length=128)
-    color = forms.CharField(max_length=64, required=False)
-    size = forms.CharField(max_length=64, required=False)
-    status = forms.ChoiceField(choices=FrameVariant.STATUS_CHOICES)
-
-
-class ComplaintCreateForm(forms.Form):
-    variant = forms.ModelChoiceField(
-        queryset=FrameVariant.objects.select_related("style").order_by("sku")
-    )
-    store = forms.ModelChoiceField(
-        queryset=Store.objects.order_by("name"),
-        required=False
-    )
-    failure_type = forms.ChoiceField(choices=Complaint.FAILURE_CHOICES)
-    severity = forms.ChoiceField(choices=Complaint.SEVERITY_CHOICES)
-    notes = forms.CharField(widget=forms.Textarea, required=False)
-
-
-# -------------------------
-# ADD FRAME
-# -------------------------
-@login_required
-@require_http_methods(["GET", "POST"])
-def frame_create(request):
-    if request.method == "POST":
-        form = FrameCreateForm(request.POST)
-        if form.is_valid():
-            style, _ = FrameStyle.objects.get_or_create(
-                style_code=form.cleaned_data["style_code"],
-                defaults={"supplier": form.cleaned_data.get("supplier", "")},
-            )
-
-            FrameVariant.objects.update_or_create(
-                sku=form.cleaned_data["sku"],
-                defaults={
-                    "style": style,
-                    "color": form.cleaned_data.get("color", ""),
-                    "size": form.cleaned_data.get("size", ""),
-                    "status": form.cleaned_data["status"],
-                    "created_at": timezone.now(),
-                },
-            )
-
-            messages.success(request, "Frame saved.")
-            return redirect("frames_list")
-    else:
-        form = FrameCreateForm(initial={"status": "OK"})
-
-    return render(request, "qc/frame_form.html", {"form": form})
-
-
-# -------------------------
-# ADD COMPLAINT (STANDALONE)
-# -------------------------
-@login_required
-@require_http_methods(["GET", "POST"])
-def complaint_create(request):
-    if request.method == "POST":
-        form = ComplaintCreateForm(request.POST)
-        if form.is_valid():
-            Complaint.objects.create(
-                variant=form.cleaned_data["variant"],
-                store=form.cleaned_data.get("store"),
-                failure_type=form.cleaned_data["failure_type"],
-                severity=form.cleaned_data["severity"],
-                notes=form.cleaned_data.get("notes", ""),
-                created_at=timezone.now(),
-            )
-            messages.success(request, "Complaint created.")
-            return redirect("complaints_list")
-    else:
-        form = ComplaintCreateForm()
-
-    return render(request, "qc/complaint_form.html", {"form": form})
-
-
-# -------------------------
-# ADD COMPLAINT FOR FRAME
-# -------------------------
-@login_required
-@require_http_methods(["GET", "POST"])
-def complaint_create_for_frame(request, pk: int):
-    variant = get_object_or_404(FrameVariant, pk=pk)
-
-    if request.method == "POST":
-        Complaint.objects.create(
-            variant=variant,
-            store_id=request.POST.get("store") or None,
-            failure_type=request.POST.get("failure_type"),
-            severity=request.POST.get("severity"),
-            notes=request.POST.get("notes", ""),
-            created_at=timezone.now(),
-        )
-        messages.success(request, f"Complaint added for {variant.sku}")
-        return redirect("complaints_list")
-
-    return render(
-        request,
-        "qc/complaint_form.html",
-        {
-            "variant": variant,
-            "stores": Store.objects.all(),
-            "failure_choices": Complaint.FAILURE_CHOICES,
-            "severity_choices": Complaint.SEVERITY_CHOICES,
+    unit, created = Unit.objects.get_or_create(
+        unit_id=unit_id,
+        defaults={
+            "order_id": payload.get("order_id"),
+            "frame_model": payload.get("frame_model", ""),
+            "lab": payload.get("lab", ""),
+            "priority": payload.get("priority", "NORMAL"),
+            "status": "QC_IN_PROGRESS",
         },
     )
 
+    # Update unit fields if provided
+    for field in ["order_id", "frame_model", "lab", "priority"]:
+        if payload.get(field):
+            setattr(unit, field, payload[field])
+    unit.status = "QC_IN_PROGRESS"
+    unit.save()
 
-# -------------------------
-# CSV TEMPLATE
-# -------------------------
+    last_attempt = Inspection.objects.filter(unit=unit).order_by("-attempt_number").first()
+    attempt_number = 1 if not last_attempt else last_attempt.attempt_number + 1
+
+    inspection = Inspection.objects.create(
+        unit=unit,
+        attempt_number=attempt_number,
+        tech_user=request.user,
+        training_mode_used=bool(payload.get("training_mode_used", False)),
+    )
+
+    return JsonResponse({
+        "inspection_id": inspection.id,
+        "unit_id": unit.unit_id,
+        "attempt_number": attempt_number,
+        "created_unit": created,
+    })
+
+
+@csrf_exempt
 @login_required
-def download_frames_template(request):
-    output = io.StringIO()
-    writer = csv.writer(output)
+def complete_stage(request):
+    """
+    POST JSON:
+    {
+      "inspection_id": 123,
+      "stage": "INTAKE"|"COSMETIC"|"RX"|"FIT"|"FINAL_PREP"|"DECISION",
+      "status": "PASS"|"FAIL",
+      "notes": "text",
+      "data": {...},
+      "defect": {  # required if FAIL
+        "category": "COSMETIC",
+        "reason_code": "LENS_SCRATCH",
+        "severity": "LOW"|"MED"|"HIGH",
+        "notes": "optional"
+      }
+    }
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
 
-    writer.writerow(["style_code", "supplier", "sku", "color", "size", "status"])
-    writer.writerow(["RB1234", "Luxottica", "RB1234-001-52", "Black", "52-18-140", "OK"])
+    payload = json.loads(request.body.decode("utf-8") or "{}")
 
-    response = HttpResponse(output.getvalue(), content_type="text/csv")
-    response["Content-Disposition"] = 'attachment; filename="frames_template.csv"'
-    return response
+    inspection_id = payload.get("inspection_id")
+    stage = payload.get("stage")
+    status = payload.get("status")
+
+    if not inspection_id or not stage or status not in ("PASS", "FAIL"):
+        return JsonResponse({"error": "inspection_id, stage, status required"}, status=400)
+
+    try:
+        inspection = Inspection.objects.get(id=inspection_id)
+    except Inspection.DoesNotExist:
+        return JsonResponse({"error": "inspection not found"}, status=404)
+
+    stage_result, _ = InspectionStageResult.objects.update_or_create(
+        inspection=inspection,
+        stage=stage,
+        defaults={
+            "status": status,
+            "notes": payload.get("notes", ""),
+            "data": payload.get("data"),
+            "completed_at": now(),
+        }
+    )
+
+    if status == "FAIL":
+        defect_payload = payload.get("defect")
+        if not defect_payload:
+            return JsonResponse({"error": "defect required when FAIL"}, status=400)
+
+        defect = Defect.objects.create(
+            stage_result=stage_result,
+            category=defect_payload.get("category", stage),
+            reason_code=defect_payload.get("reason_code", "UNKNOWN"),
+            severity=defect_payload.get("severity", "LOW"),
+            notes=defect_payload.get("notes", ""),
+        )
+
+        ReworkTicket.objects.create(
+            unit=inspection.unit,
+            inspection=inspection,
+            failed_stage=stage,
+            reason_summary=f"{defect.reason_code} ({defect.severity})",
+        )
+
+        inspection.unit.status = "QUARANTINE" if defect.severity == "HIGH" else "REWORK"
+        inspection.unit.save()
+
+    return JsonResponse({
+        "stage_result_id": stage_result.id,
+        "inspection_id": inspection.id,
+        "stage": stage,
+        "status": status,
+    })
 
 
-# -------------------------
-# IMPORT FRAMES
-# -------------------------
+@csrf_exempt
 @login_required
-@require_http_methods(["GET", "POST"])
-def import_frames(request):
-    if request.method == "POST":
-        f = request.FILES.get("file")
-        if not f:
-            messages.error(request, "Upload a CSV file.")
-            return redirect("import_frames")
+def finalize_inspection(request):
+    """
+    POST JSON: { "inspection_id": 123 }
 
-        raw = f.read().decode("utf-8-sig", errors="replace")
-        reader = csv.DictReader(io.StringIO(raw))
+    Rule:
+    - If all required stages PASS -> PASS + unit STORE_READY
+    - Else FAIL (unit stays REWORK/QUARANTINE/QC_IN_PROGRESS)
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
 
-        with transaction.atomic():
-            for row in reader:
-                style, _ = FrameStyle.objects.get_or_create(
-                    style_code=row["style_code"],
-                    defaults={"supplier": row.get("supplier", "")},
-                )
+    payload = json.loads(request.body.decode("utf-8") or "{}")
+    inspection_id = payload.get("inspection_id")
+    if not inspection_id:
+        return JsonResponse({"error": "inspection_id required"}, status=400)
 
-                FrameVariant.objects.update_or_create(
-                    sku=row["sku"],
-                    defaults={
-                        "style": style,
-                        "color": row.get("color", ""),
-                        "size": row.get("size", ""),
-                        "status": row.get("status", "OK"),
-                        "created_at": timezone.now(),
-                    },
-                )
+    try:
+        inspection = Inspection.objects.get(id=inspection_id)
+    except Inspection.DoesNotExist:
+        return JsonResponse({"error": "inspection not found"}, status=404)
 
-        messages.success(request, "Frames imported.")
-        return redirect("frames_list")
+    required_stages = {"INTAKE", "COSMETIC", "RX", "FIT", "FINAL_PREP"}
+    results = InspectionStageResult.objects.filter(inspection=inspection)
+    stage_map = {r.stage: r.status for r in results}
 
-    return render(request, "qc/import_frames.html")
+    all_present = required_stages.issubset(stage_map.keys())
+    all_passed = all_present and all(stage_map[s] == "PASS" for s in required_stages)
+
+    inspection.completed_at = now()
+
+    if all_passed:
+        inspection.final_result = "PASS"
+        inspection.unit.status = "STORE_READY"
+        inspection.unit.save()
+    else:
+        inspection.final_result = "FAIL"
+        if inspection.unit.status == "QC_IN_PROGRESS":
+            inspection.unit.status = "QC_IN_PROGRESS"
+            inspection.unit.save()
+
+    inspection.save()
+
+    return JsonResponse({
+        "inspection_id": inspection.id,
+        "final_result": inspection.final_result,
+        "unit_status": inspection.unit.status,
+        "stages": stage_map,
+    })
+
+
+@login_required
+def dashboard(request):
+    """
+    GET /api/qc/dashboard/?days=7
+    """
+    try:
+        days = int(request.GET.get("days", "7"))
+    except ValueError:
+        days = 7
+
+    return JsonResponse({
+        "days": days,
+        "pass_rate": pass_rate(days),
+        "first_pass_yield": first_pass_yield(days),
+        "avg_qc_time_minutes": avg_qc_time(days),
+        "bottleneck_stage": bottleneck_stage(days),
+    })
 
