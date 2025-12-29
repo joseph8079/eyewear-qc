@@ -1,88 +1,31 @@
 {% extends "qc/base.html" %}
 {% block content %}
 
-<div class="d-flex align-items-center justify-content-between mb-3">
-  <div>
-    <h1 class="h3 mb-0">Dashboard</h1>
-    <div class="text-muted">Ctrue Quality Tracker</div>
+<div class="card" style="margin-bottom:12px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;">
+    <div>
+      <div class="muted">Overview (last {{days}} days)</div>
+      <div style="font-size:20px;font-weight:800;">Quality Analytics</div>
+    </div>
+    <span class="pill">Stable UI v1</span>
   </div>
 </div>
 
-<div class="row g-3 mb-4">
-  <div class="col-md-6">
-    <div class="card shadow-sm">
-      <div class="card-body">
-        <div class="text-muted">Total Frames</div>
-        <div class="display-6">{{ total_frames }}</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-6">
-    <div class="card shadow-sm">
-      <div class="card-body">
-        <div class="text-muted">Total Complaints</div>
-        <div class="display-6">{{ total_complaints }}</div>
-      </div>
-    </div>
-  </div>
+<div class="grid" style="margin-bottom:12px;">
+  <div class="card"><div class="muted">Pass Rate</div><div class="kpi">{{pass_rate}}%</div></div>
+  <div class="card"><div class="muted">First Pass Yield</div><div class="kpi">{{first_pass_yield}}%</div></div>
+  <div class="card"><div class="muted">Avg QC Time</div><div class="kpi">{{avg_qc_time_minutes}}<span class="muted" style="font-size:14px;"> min</span></div></div>
+  <div class="card"><div class="muted">Bottleneck</div><div class="kpi" style="font-size:18px;">{{bottleneck_stage}}</div></div>
 </div>
 
-<div class="row g-3">
-  <div class="col-lg-6">
-    <div class="card shadow-sm">
-      <div class="card-header bg-white fw-semibold">Latest Complaints</div>
-      <div class="card-body p-0">
-        <div class="table-responsive">
-          <table class="table mb-0 table-hover">
-            <thead class="table-light">
-              <tr>
-                <th>Frame</th><th>Store</th><th>Type</th><th>Severity</th>
-              </tr>
-            </thead>
-            <tbody>
-            {% for c in latest_complaints %}
-              <tr>
-                <td><a href="{% url 'frame_detail' c.variant.id %}">{{ c.variant.sku }}</a></td>
-                <td>{{ c.store }}</td>
-                <td>{{ c.get_failure_type_display }}</td>
-                <td>{{ c.get_severity_display }}</td>
-              </tr>
-            {% empty %}
-              <tr><td colspan="4" class="text-muted p-3">No complaints yet.</td></tr>
-            {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-lg-6">
-    <div class="card shadow-sm">
-      <div class="card-header bg-white fw-semibold">Worst QC Score (cached)</div>
-      <div class="card-body p-0">
-        <div class="table-responsive">
-          <table class="table mb-0 table-hover">
-            <thead class="table-light">
-              <tr><th>SKU</th><th>Style</th><th>Status</th><th>QC</th></tr>
-            </thead>
-            <tbody>
-            {% for f in worst_frames %}
-              <tr>
-                <td><a href="{% url 'frame_detail' f.id %}">{{ f.sku }}</a></td>
-                <td>{{ f.style.style_code }}</td>
-                <td>{{ f.status }}</td>
-                <td>{{ f.qc_score_cached }}</td>
-              </tr>
-            {% empty %}
-              <tr><td colspan="4" class="text-muted p-3">No frames yet.</td></tr>
-            {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
+<div class="card">
+  <div style="font-weight:800;margin-bottom:8px;">Next upgrades (coming next)</div>
+  <ul class="muted">
+    <li>Auto-flag: model/lab defect threshold (7 days)</li>
+    <li>SLA timers for stuck urgent jobs</li>
+    <li>Training mode tips overlay</li>
+    <li>Photo annotation (circle defect)</li>
+  </ul>
 </div>
 
 {% endblock %}

@@ -2,11 +2,11 @@ import csv
 import io
 import json
 
+from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.utils.timezone import now, timedelta
 from django.views.decorators.csrf import csrf_exempt
-from django.contrib.auth.decorators import login_required
 
 from .models import (
     Unit,
@@ -16,54 +16,46 @@ from .models import (
     ReworkTicket,
 )
 
-
 # ============================================================
-# ROOT + HEALTH (ALWAYS SAFE FOR RENDER HEALTH CHECKS)
+# HEALTH (Render polls /health/)
 # ============================================================
-
-def home(request):
-    """
-    Keep root route extremely stable:
-    - Works for GET and HEAD
-    - No templates
-    - Prevents Render health checks from failing
-    """
-    return JsonResponse({"ok": True, "message": "QC service running"})
-
 
 def health(request):
     return JsonResponse({"ok": True, "service": "qc"})
 
 
 # ============================================================
-# UI PAGES (HTML)
+# UI PAGES
 # ============================================================
 
 @login_required
 def ui_home(request):
-    return render(request, "qc/home.html")
+    # landing goes to dashboard
+    return redirect("/ui/dashboard/")
 
 
 @login_required
-def legacy_frames_page(request):
-    # Later you can bind this to real Unit data
-    return render(request, "qc/frames.html")
+def ui_dashboard(request):
+    # Dashboard pulls data server-side for now (simple & stable)
+    days = 7
+    context = _build_dashboard_context(days=days)
+    return render(request, "qc/dashboard.html", context)
 
 
 @login_required
-def legacy_complaints_page(request):
-    return render(request, "qc/complaints.html")
+def ui_frames(request):
+    # Show newest units first
+    units = Unit.objects.all().order_by("-id")[:200]
+    return render(request, "qc/frames.html", {"units": units})
 
 
 @login_required
 @csrf_exempt
-def legacy_import_frames_page(request):
+def ui_import_frames(request):
     """
-    Basic CSV uploader.
-    Expected columns (any casing ok, extra columns ignored):
+    Upload CSV to create/update Units.
+    Columns supported (case-insensitive):
       unit_id, order_id, frame_model, lab, priority
-
-    If unit_id missing in a row, row is skipped.
     """
     if request.method == "GET":
         return render(request, "qc/import_frames.html")
@@ -83,7 +75,6 @@ def legacy_import_frames_page(request):
 
         for row in reader:
             norm = {(k or "").strip().lower(): (v or "").strip() for k, v in row.items()}
-
             unit_id = norm.get("unit_id") or norm.get("unit") or norm.get("id")
             if not unit_id:
                 skipped += 1
@@ -98,7 +89,6 @@ def legacy_import_frames_page(request):
             }
 
             unit, was_created = Unit.objects.get_or_create(unit_id=unit_id, defaults=defaults)
-
             if was_created:
                 created += 1
             else:
@@ -121,8 +111,17 @@ def legacy_import_frames_page(request):
         return render(request, "qc/import_frames.html", {"error": f"Upload failed: {e}"})
 
 
+@login_required
+def ui_qc_wizard(request):
+    """
+    Placeholder UI for the step-by-step QC flow.
+    We'll wire buttons to the API endpoints next.
+    """
+    return render(request, "qc/qc_wizard.html")
+
+
 # ============================================================
-# INLINE METRICS (NO qc.services PACKAGE)
+# DASHBOARD METRICS (INLINE)
 # ============================================================
 
 def _pass_rate(days=7):
@@ -134,27 +133,18 @@ def _pass_rate(days=7):
 
 def _first_pass_yield(days=7):
     start = now() - timedelta(days=days)
-
-    first_pass = Inspection.objects.filter(
-        started_at__gte=start,
-        attempt_number=1,
-        final_result="PASS",
-    )
-
+    first_pass = Inspection.objects.filter(started_at__gte=start, attempt_number=1, final_result="PASS")
     reworked_unit_ids = set(
-        ReworkTicket.objects.filter(inspection__in=first_pass)
-        .values_list("unit_id", flat=True)
+        ReworkTicket.objects.filter(inspection__in=first_pass).values_list("unit_id", flat=True)
     )
-
     fp_count = first_pass.exclude(unit_id__in=reworked_unit_ids).count()
     total = first_pass.count()
     return 0 if total == 0 else round((fp_count / total) * 100, 2)
 
 
-def _avg_qc_time(days=7):
+def _avg_qc_time_minutes(days=7):
     start = now() - timedelta(days=days)
     qs = Inspection.objects.filter(started_at__gte=start, completed_at__isnull=False)
-
     secs = [
         (i.completed_at - i.started_at).total_seconds()
         for i in qs
@@ -169,7 +159,6 @@ def _bottleneck_stage(days=7):
 
     durations = {}
     for r in qs:
-        # started_at may be null depending on your model defaults
         if not r.started_at or not r.completed_at:
             continue
         dur = (r.completed_at - r.started_at).total_seconds()
@@ -182,98 +171,29 @@ def _bottleneck_stage(days=7):
     return max(avg, key=avg.get)
 
 
-# ============================================================
-# LEGACY API ENDPOINTS (SAFE STUBS)
-# ============================================================
-
-@login_required
-def legacy_stores(request):
-    return JsonResponse({"legacy": True, "items": []})
-
-
-@login_required
-def legacy_frame_styles(request):
-    return JsonResponse({"legacy": True, "items": []})
-
-
-@login_required
-def legacy_frame_variants(request):
-    return JsonResponse({"legacy": True, "items": []})
-
-
-@csrf_exempt
-@login_required
-def legacy_complaints(request):
-    if request.method == "GET":
-        return JsonResponse({"legacy": True, "items": []})
-
-    if request.method == "POST":
-        payload = json.loads(request.body.decode("utf-8") or "{}")
-        return JsonResponse(
-            {
-                "legacy": True,
-                "created": True,
-                "complaint": {
-                    "id": 1,
-                    "data": payload,
-                    "note": "Legacy stub. Old Complaint models removed.",
-                },
-            }
-        )
-
-    return JsonResponse({"error": "method not allowed"}, status=405)
-
-
-@login_required
-def legacy_complaint_detail(request, complaint_id: int):
-    return JsonResponse(
-        {
-            "legacy": True,
-            "complaint": {
-                "id": complaint_id,
-                "note": "Legacy stub. Old Complaint models removed.",
-            },
-        }
-    )
-
-
-@csrf_exempt
-@login_required
-def legacy_complaint_attachments(request, complaint_id: int):
-    if request.method == "GET":
-        return JsonResponse({"legacy": True, "items": []})
-
-    if request.method == "POST":
-        return JsonResponse(
-            {"legacy": True, "uploaded": True, "note": "Legacy stub. Old Attachment models removed."}
-        )
-
-    return JsonResponse({"error": "method not allowed"}, status=405)
+def _build_dashboard_context(days=7):
+    # Simple “alerts” scaffolding (we’ll replace with real defect threshold + SLA next)
+    return {
+        "days": days,
+        "pass_rate": _pass_rate(days),
+        "first_pass_yield": _first_pass_yield(days),
+        "avg_qc_time_minutes": _avg_qc_time_minutes(days),
+        "bottleneck_stage": _bottleneck_stage(days) or "—",
+        "alerts": [],
+    }
 
 
 # ============================================================
-# QC v2.1 API ENDPOINTS
+# API: QC v2.1
 # ============================================================
 
 @csrf_exempt
 @login_required
 def start_inspection(request):
-    """
-    POST JSON:
-    {
-      "unit_id": "U123",
-      "order_id": "O999",
-      "frame_model": "Rayban 123",
-      "lab": "LabA",
-      "priority": "NORMAL" | "URGENT",
-      "training_mode_used": true/false
-    }
-    """
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
 
     payload = json.loads(request.body.decode("utf-8") or "{}")
-
     unit_id = payload.get("unit_id")
     if not unit_id:
         return JsonResponse({"error": "unit_id required"}, status=400)
@@ -292,7 +212,6 @@ def start_inspection(request):
     for field in ["order_id", "frame_model", "lab", "priority"]:
         if payload.get(field):
             setattr(unit, field, payload[field])
-
     unit.status = "QC_IN_PROGRESS"
     unit.save()
 
@@ -307,39 +226,17 @@ def start_inspection(request):
     )
 
     return JsonResponse(
-        {
-            "inspection_id": inspection.id,
-            "unit_id": unit.unit_id,
-            "attempt_number": attempt_number,
-            "created_unit": created,
-        }
+        {"inspection_id": inspection.id, "unit_id": unit.unit_id, "attempt_number": attempt_number, "created_unit": created}
     )
 
 
 @csrf_exempt
 @login_required
 def complete_stage(request):
-    """
-    POST JSON:
-    {
-      "inspection_id": 123,
-      "stage": "INTAKE"|"COSMETIC"|"RX"|"FIT"|"FINAL_PREP"|"DECISION",
-      "status": "PASS"|"FAIL",
-      "notes": "text",
-      "data": {...},
-      "defect": {  # required if FAIL
-        "category": "COSMETIC",
-        "reason_code": "LENS_SCRATCH",
-        "severity": "LOW"|"MED"|"HIGH",
-        "notes": "optional"
-      }
-    }
-    """
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
 
     payload = json.loads(request.body.decode("utf-8") or "{}")
-
     inspection_id = payload.get("inspection_id")
     stage = payload.get("stage")
     status = payload.get("status")
@@ -386,36 +283,14 @@ def complete_stage(request):
         inspection.unit.status = "QUARANTINE" if defect.severity == "HIGH" else "REWORK"
         inspection.unit.save()
 
-        return JsonResponse(
-            {
-                "stage_result_id": stage_result.id,
-                "inspection_id": inspection.id,
-                "stage": stage,
-                "status": status,
-                "defect_id": defect.id,
-            }
-        )
+        return JsonResponse({"stage_result_id": stage_result.id, "defect_id": defect.id, "status": "FAIL"})
 
-    return JsonResponse(
-        {
-            "stage_result_id": stage_result.id,
-            "inspection_id": inspection.id,
-            "stage": stage,
-            "status": status,
-        }
-    )
+    return JsonResponse({"stage_result_id": stage_result.id, "status": "PASS"})
 
 
 @csrf_exempt
 @login_required
 def finalize_inspection(request):
-    """
-    POST JSON: { "inspection_id": 123 }
-
-    Rule:
-    - If INTAKE+COSMETIC+RX+FIT+FINAL_PREP are all PASS => PASS and unit STORE_READY
-    - Else FAIL (unit stays REWORK/QUARANTINE/QC_IN_PROGRESS)
-    """
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
 
@@ -444,27 +319,15 @@ def finalize_inspection(request):
         inspection.unit.save()
     else:
         inspection.final_result = "FAIL"
-        if inspection.unit.status == "QC_IN_PROGRESS":
-            inspection.unit.status = "QC_IN_PROGRESS"
-            inspection.unit.save()
 
     inspection.save()
 
-    return JsonResponse(
-        {
-            "inspection_id": inspection.id,
-            "final_result": inspection.final_result,
-            "unit_status": inspection.unit.status,
-            "stages": stage_map,
-        }
-    )
+    return JsonResponse({"inspection_id": inspection.id, "final_result": inspection.final_result, "unit_status": inspection.unit.status})
 
 
 @login_required
 def dashboard(request):
-    """
-    GET /api/qc/dashboard/?days=7
-    """
+    # API version (JSON) — used later by JS; UI uses server-side for now
     try:
         days = int(request.GET.get("days", "7"))
     except ValueError:
@@ -475,7 +338,8 @@ def dashboard(request):
             "days": days,
             "pass_rate": _pass_rate(days),
             "first_pass_yield": _first_pass_yield(days),
-            "avg_qc_time_minutes": _avg_qc_time(days),
+            "avg_qc_time_minutes": _avg_qc_time_minutes(days),
             "bottleneck_stage": _bottleneck_stage(days),
         }
     )
+

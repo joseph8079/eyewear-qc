@@ -2,24 +2,14 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    # Health
-    path("health/", views.health, name="qc-health"),
-
-    # UI Pages
+    # UI
     path("ui/", views.ui_home, name="ui-home"),
-    path("frames/", views.legacy_frames_page, name="legacy-frames-page"),
-    path("complaints/", views.legacy_complaints_page, name="legacy-complaints-page"),
-    path("import/frames/", views.legacy_import_frames_page, name="legacy-import-frames-page"),
+    path("ui/dashboard/", views.ui_dashboard, name="ui-dashboard"),
+    path("frames/", views.ui_frames, name="ui-frames"),
+    path("import/frames/", views.ui_import_frames, name="ui-import-frames"),
+    path("ui/qc/", views.ui_qc_wizard, name="ui-qc-wizard"),
 
-    # Legacy API stubs
-    path("api/stores/", views.legacy_stores, name="legacy-stores"),
-    path("api/frame-styles/", views.legacy_frame_styles, name="legacy-frame-styles"),
-    path("api/frame-variants/", views.legacy_frame_variants, name="legacy-frame-variants"),
-    path("api/complaints/", views.legacy_complaints, name="legacy-complaints"),
-    path("api/complaints/<int:complaint_id>/", views.legacy_complaint_detail, name="legacy-complaint-detail"),
-    path("api/complaints/<int:complaint_id>/attachments/", views.legacy_complaint_attachments, name="legacy-complaint-attachments"),
-
-    # QC v2.1 API
+    # API (QC v2.1)
     path("api/qc/start-inspection/", views.start_inspection, name="qc-start-inspection"),
     path("api/qc/complete-stage/", views.complete_stage, name="qc-complete-stage"),
     path("api/qc/finalize/", views.finalize_inspection, name="qc-finalize"),

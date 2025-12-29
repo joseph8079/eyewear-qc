@@ -1,0 +1,30 @@
+{% extends "qc/base.html" %}
+{% block content %}
+
+<div class="card" style="margin-bottom:12px;">
+  <div class="muted">Workflow</div>
+  <div style="font-size:20px;font-weight:800;">QC Wizard (Next)</div>
+</div>
+
+<div class="card">
+  <div class="muted" style="margin-bottom:10px;">
+    Next step: we will connect this to:
+    <code>/api/qc/start-inspection</code>, <code>/api/qc/complete-stage</code>, <code>/api/qc/finalize</code>
+  </div>
+
+  <ol>
+    <li>Scan / enter Unit ID</li>
+    <li>INTAKE → PASS/FAIL</li>
+    <li>COSMETIC → PASS/FAIL (add defect)</li>
+    <li>RX → PASS/FAIL</li>
+    <li>FIT → PASS/FAIL</li>
+    <li>FINAL PREP → PASS/FAIL</li>
+    <li>Finalize → STORE READY or REWORK</li>
+  </ol>
+
+  <div style="margin-top:12px;">
+    <a class="btn" href="/frames/">Open Frames</a>
+  </div>
+</div>
+
+{% endblock %}

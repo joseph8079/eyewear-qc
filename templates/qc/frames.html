@@ -1,22 +1,43 @@
 {% extends "qc/base.html" %}
 {% block content %}
-<div class="card">
-    <h2>Frames</h2>
-    <p class="muted">This will show incoming units ready for QC.</p>
 
-    <table width="100%" border="0" cellpadding="8">
-        <tr>
-            <th align="left">Unit</th>
-            <th align="left">Model</th>
-            <th align="left">Status</th>
-            <th></th>
-        </tr>
-        <tr>
-            <td>U-001</td>
-            <td>Demo Frame</td>
-            <td>QC Pending</td>
-            <td><a class="btn" href="#">Start QC</a></td>
-        </tr>
-    </table>
+<div class="card" style="margin-bottom:12px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;">
+    <div>
+      <div class="muted">Inventory</div>
+      <div style="font-size:20px;font-weight:800;">Frames / Units</div>
+    </div>
+    <a class="btn" href="/import/frames/">Import CSV</a>
+  </div>
 </div>
+
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Unit ID</th>
+        <th>Order</th>
+        <th>Model</th>
+        <th>Lab</th>
+        <th>Priority</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in units %}
+        <tr>
+          <td>{{u.unit_id}}</td>
+          <td>{{u.order_id}}</td>
+          <td>{{u.frame_model}}</td>
+          <td>{{u.lab}}</td>
+          <td>{{u.priority}}</td>
+          <td><span class="pill">{{u.status}}</span></td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="6" class="muted">No units yet. Import a CSV.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
 {% endblock %}
