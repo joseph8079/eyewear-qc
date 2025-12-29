@@ -1,0 +1,89 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>New Complaint</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin:0; background:#0b0f19; color:#e8eefc; }
+    a { color:#9dd1ff; text-decoration:none; }
+    .wrap { max-width:900px; margin:0 auto; padding:20px; }
+    .card { background:#121a2b; border:1px solid #1f2a44; border-radius:14px; padding:14px; margin-top:12px; }
+    .btn { display:inline-block; padding:10px 12px; border-radius:12px; background:#1b2742; border:1px solid #2a3b62; color:#e8eefc; cursor:pointer; }
+    .btn:hover { background:#223155; }
+    input, select, textarea { background:#0b0f19; border:1px solid #2a3b62; color:#e8eefc; padding:10px; border-radius:12px; width:100%; }
+    textarea { min-height:100px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+  {% include "qc/_navbar.html" %}
+    <div class="row" style="justify-content:space-between; align-items:center;">
+      <div>
+        <h1 style="margin:0;">New Complaint</h1>
+        <div style="opacity:.8;">Create a store complaint + optional photos</div>
+      </div>
+      <div class="row">
+        <a class="btn" href="{% url 'complaints_list' %}">Back</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+
+        <div class="row">
+          <div style="flex:1;">
+            <label>Store</label>
+            <select name="store_id" required>
+              <option value="">Select store</option>
+              {% for s in stores %}
+                <option value="{{ s.id }}">{{ s.name }} ({{ s.code }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div style="flex:1;">
+            <label>Category</label>
+            <select name="category">
+              {% for c in category_choices %}
+                <option value="{{ c }}">{{ c }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div style="margin-top:10px;">
+          <label>Title</label>
+          <input name="title" required placeholder="Example: Scratch on left lens">
+        </div>
+
+        <div class="row" style="margin-top:10px;">
+          <div style="flex:1;">
+            <label>Unit ID (optional)</label>
+            <input name="unit_id" placeholder="U-000123">
+          </div>
+          <div style="flex:1;">
+            <label>Order ID (optional)</label>
+            <input name="order_id" placeholder="ORD-000123">
+          </div>
+        </div>
+
+        <div style="margin-top:10px;">
+          <label>Description</label>
+          <textarea name="description" placeholder="Describe what the store reported..."></textarea>
+        </div>
+
+        <div style="margin-top:10px;">
+          <label>Attachments (optional)</label>
+          <input type="file" name="files" multiple accept="image/*">
+        </div>
+
+        <div style="margin-top:12px;">
+          <button class="btn" type="submit">Create Complaint</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,15 @@
+<!-- qc/templates/qc/_navbar.html -->
+<div class="row" style="justify-content:space-between; align-items:center; margin-bottom:14px;">
+  <div class="row" style="gap:10px; align-items:center;">
+    <a class="btn" href="{% url 'ui_dashboard' %}">Dashboard</a>
+    <a class="btn" href="{% url 'frames_list' %}">Frames</a>
+    <a class="btn" href="{% url 'import_frames' %}">Import</a>
+    <a class="btn" href="{% url 'complaints_list' %}">Complaints</a>
+  </div>
+
+  <div class="row" style="gap:10px; align-items:center;">
+    <span style="opacity:.75; font-size:13px;">{{ request.user.username }}</span>
+    <a class="btn" href="/admin/">Admin</a>
+    <a class="btn" href="/accounts/logout/">Logout</a>
+  </div>
+</div>

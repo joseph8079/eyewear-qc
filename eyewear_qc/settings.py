@@ -1,26 +1,17 @@
-from pathlib import Path
+# eyewear_qc/settings.py
 import os
-
-import dj_database_url
+from pathlib import Path
 from dotenv import load_dotenv
+import dj_database_url
 
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv("SECRET_KEY", "dev-insecure-secret-key-change-me")
-DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-key-change-me")
+DEBUG = os.environ.get("DEBUG", "0") == "1"
 
 ALLOWED_HOSTS = ["*"]
-
-CSRF_TRUSTED_ORIGINS = []
-if os.getenv("CSRF_TRUSTED_ORIGINS"):
-    # comma-separated
-    CSRF_TRUSTED_ORIGINS = [x.strip() for x in os.getenv("CSRF_TRUSTED_ORIGINS").split(",") if x.strip()]
-
-# ============================================================
-# APPS
-# ============================================================
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -35,13 +26,10 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
-
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
-
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
-
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -61,38 +49,18 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
             ],
         },
-    },
+    }
 ]
 
 WSGI_APPLICATION = "eyewear_qc.wsgi.application"
 
-# ============================================================
-# DATABASE
-# ============================================================
-
-DATABASE_URL = os.getenv("DATABASE_URL", "")
-if DATABASE_URL:
-    DATABASES = {"default": dj_database_url.config(default=DATABASE_URL, conn_max_age=600)}
-else:
-    # local fallback
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
-        }
-    }
-
-# ============================================================
-# AUTH / LOGIN
-# ============================================================
-
-LOGIN_URL = "/accounts/login/"
-LOGIN_REDIRECT_URL = "/ui/dashboard/"
-LOGOUT_REDIRECT_URL = "/accounts/login/"
-
-# ============================================================
-# PASSWORD VALIDATION (keep simple for now)
-# ============================================================
+DATABASES = {
+    "default": dj_database_url.config(
+        default=os.environ.get("DATABASE_URL", "sqlite:///" + str(BASE_DIR / "db.sqlite3")),
+        conn_max_age=600,
+        ssl_require=not DEBUG,
+    )
+}
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -106,27 +74,22 @@ TIME_ZONE = "America/New_York"
 USE_I18N = True
 USE_TZ = True
 
-# ============================================================
-# STATIC
-# ============================================================
-
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
-# ============================================================
-# MEDIA (for defect photos)
-# ============================================================
-
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
-# ============================================================
-# SECURITY (Render friendly)
-# ============================================================
-
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-SESSION_COOKIE_SECURE = False
-CSRF_COOKIE_SECURE = False
-
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Auth redirects
+LOGIN_URL = "/accounts/login/"
+LOGIN_REDIRECT_URL = "/ui/dashboard/"
+LOGOUT_REDIRECT_URL = "/accounts/login/"
+
+# Security headers for Render
+CSRF_TRUSTED_ORIGINS = [os.environ.get("CSRF_TRUSTED_ORIGIN", "https://eyewear-qc.onrender.com")]
+
+# Optional: if you want force https behind Render
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

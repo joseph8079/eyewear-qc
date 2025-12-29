@@ -1,32 +1,109 @@
-{% extends "qc/base.html" %}
-{% block content %}
-
-<div class="card" style="margin-bottom:12px;">
-  <div style="display:flex;align-items:center;justify-content:space-between;">
-    <div>
-      <div class="muted">Overview (last {{days}} days)</div>
-      <div style="font-size:20px;font-weight:800;">Quality Analytics</div>
+<!-- qc/templates/qc/dashboard.html -->
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>QC Dashboard</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 0; background:#0b0f19; color:#e8eefc; }
+    a { color:#9dd1ff; text-decoration:none; }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    .top { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .cards { display:grid; grid-template-columns: repeat(4,1fr); gap:12px; margin-top:14px; }
+    .card { background:#121a2b; border:1px solid #1f2a44; border-radius:14px; padding:14px; }
+    .k { font-size:12px; opacity:.8; }
+    .v { font-size:28px; font-weight:800; margin-top:6px; }
+    .grid2 { display:grid; grid-template-columns: 1.2fr .8fr; gap:12px; margin-top:12px; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { padding:10px; border-bottom:1px solid #1f2a44; font-size:14px; }
+    th { text-align:left; opacity:.9; }
+    .pill { display:inline-block; padding:4px 10px; border-radius:999px; background:#1b2742; border:1px solid #2a3b62; font-size:12px; }
+    .btn { display:inline-block; padding:10px 12px; border-radius:12px; background:#1b2742; border:1px solid #2a3b62; }
+    .btn:hover { background:#223155; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+    @media (max-width: 960px) {
+      .cards { grid-template-columns: repeat(2,1fr); }
+      .grid2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+  {% include "qc/_navbar.html" %}
+    <div class="top">
+      <div>
+        <h1 style="margin:0;">Eyewear QC — Dashboard</h1>
+        <div style="opacity:.8;">7-day analytics + live operational counts</div>
+      </div>
+      <div class="row">
+        <a class="btn" href="{% url 'frames_list' %}">Frames List</a>
+        <a class="btn" href="{% url 'import_frames_page' %}">Import Frames</a>
+        <a class="btn" href="/admin/">Admin</a>
+        <a class="btn" href="/accounts/logout/">Logout</a>
+      </div>
     </div>
-    <span class="pill">Stable UI v1</span>
+
+    <div class="cards">
+      <div class="card">
+        <div class="k">Not Inspected Yet</div>
+        <div class="v">{{ overview.not_inspected }}</div>
+      </div>
+      <div class="card">
+        <div class="k">In Progress</div>
+        <div class="v">{{ overview.in_progress }}</div>
+      </div>
+      <div class="card">
+        <div class="k">Passed (Store Ready)</div>
+        <div class="v">{{ overview.passed }}</div>
+      </div>
+      <div class="card">
+        <div class="k">Failed / Needs Rework</div>
+        <div class="v">{{ overview.failed }}</div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3 style="margin:0 0 6px 0;">Quality KPIs</h3>
+        <div class="row">
+          <span class="pill">First Pass Yield: <b>{{ fpy.fpy }}%</b> ({{ fpy.numerator }}/{{ fpy.denominator }})</span>
+          <span class="pill">Avg QC Time: <b>{{ avg_hours }}</b> hrs</span>
+          <span class="pill">Urgent SLA Breaches (&gt;6h): <b>{{ urgent_breaches }}</b></span>
+        </div>
+        <p style="opacity:.8; margin-top:10px;">
+          Auto-flagging runs on page load and tracks models/labs exceeding defect thresholds in last 7 days.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3 style="margin:0 0 10px 0;">Active Flags</h3>
+        {% if active_flags %}
+          <table>
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Key</th>
+                <th>Defect Rate</th>
+                <th>Sample</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for f in active_flags %}
+              <tr>
+                <td>{{ f.flag_type }}</td>
+                <td>{{ f.flag_key }}</td>
+                <td><b>{{ f.defect_rate }}%</b> / {{ f.threshold }}%</td>
+                <td>{{ f.sample_size }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <div style="opacity:.8;">No active flags ✅</div>
+        {% endif %}
+      </div>
+    </div>
   </div>
-</div>
-
-<div class="grid" style="margin-bottom:12px;">
-  <div class="card"><div class="muted">Pass Rate</div><div class="kpi">{{pass_rate}}%</div></div>
-  <div class="card"><div class="muted">First Pass Yield</div><div class="kpi">{{first_pass_yield}}%</div></div>
-  <div class="card"><div class="muted">Avg QC Time</div><div class="kpi">{{avg_qc_time_minutes}}<span class="muted" style="font-size:14px;"> min</span></div></div>
-  <div class="card"><div class="muted">Bottleneck</div><div class="kpi" style="font-size:18px;">{{bottleneck_stage}}</div></div>
-</div>
-
-<div class="card">
-  <div style="font-weight:800;margin-bottom:8px;">Next upgrades (coming next)</div>
-  <ul class="muted">
-    <li>Auto-flag: model/lab defect threshold (7 days)</li>
-    <li>SLA timers for stuck urgent jobs</li>
-    <li>Training mode tips overlay</li>
-    <li>Photo annotation (circle defect)</li>
-  </ul>
-</div>
-
-{% endblock %}
-
+</body>
+</html>

@@ -1,0 +1,113 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Complaint {{ complaint.id }}</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin:0; background:#0b0f19; color:#e8eefc; }
+    a { color:#9dd1ff; text-decoration:none; }
+    .wrap { max-width:1100px; margin:0 auto; padding:20px; }
+    .card { background:#121a2b; border:1px solid #1f2a44; border-radius:14px; padding:14px; margin-top:12px; }
+    .btn { display:inline-block; padding:10px 12px; border-radius:12px; background:#1b2742; border:1px solid #2a3b62; color:#e8eefc; cursor:pointer; }
+    .btn:hover { background:#223155; }
+    input, select, textarea { background:#0b0f19; border:1px solid #2a3b62; color:#e8eefc; padding:10px; border-radius:12px; width:100%; }
+    textarea { min-height:80px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .pill { display:inline-block; padding:4px 10px; border-radius:999px; background:#1b2742; border:1px solid #2a3b62; font-size:12px; }
+    img { max-width:100%; border-radius:12px; border:1px solid #2a3b62; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+  {% include "qc/_navbar.html" %}
+    <div class="row" style="justify-content:space-between;">
+      <div>
+        <h1 style="margin:0;">Complaint #{{ complaint.id }}</h1>
+        <div style="opacity:.85;">
+          Store: <b>{{ complaint.store.name }}</b> •
+          Status: <span class="pill">{{ complaint.status }}</span> •
+          Category: <b>{{ complaint.category }}</b>
+        </div>
+        <div style="opacity:.75; margin-top:6px;">
+          Created: {{ complaint.created_at }} by {{ complaint.created_by }}
+        </div>
+      </div>
+      <div class="row">
+        <a class="btn" href="{% url 'complaints_list' %}">Back</a>
+        <a class="btn" href="{% url 'frames_list' %}">Frames</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">{{ complaint.title }}</h2>
+      <div style="opacity:.9; white-space:pre-wrap;">{{ complaint.description }}</div>
+      <div style="margin-top:10px; opacity:.85;">
+        Unit:
+        {% if complaint.unit %}<b>{{ complaint.unit.unit_id }}</b>{% else %}<b>{{ complaint.unit_id_text }}</b>{% endif %}
+        • Order: <b>{{ complaint.order_id_text }}</b>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;">Update Status</h3>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="update_status">
+        <div class="row">
+          <div style="flex:1;">
+            <label>Status</label>
+            <select name="status">
+              {% for s in status_choices %}
+                <option value="{{ s }}" {% if s == complaint.status %}selected{% endif %}>{{ s }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div style="flex:2;">
+            <label>Resolution Notes (if RESOLVED)</label>
+            <textarea name="resolution_notes" placeholder="What fixed it?"></textarea>
+          </div>
+        </div>
+        <div style="margin-top:10px;">
+          <button class="btn" type="submit">Save</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;">Attachments</h3>
+
+      <form method="post" enctype="multipart/form-data" class="row">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_attachment">
+        <div style="flex:2;">
+          <label>Upload</label>
+          <input type="file" name="file" accept="image/*" required>
+        </div>
+        <div style="flex:3;">
+          <label>Note</label>
+          <input name="note" placeholder="Optional note">
+        </div>
+        <div style="align-self:flex-end;">
+          <button class="btn" type="submit">Add</button>
+        </div>
+      </form>
+
+      <div style="margin-top:12px;">
+        {% for a in attachments %}
+          <div class="card" style="margin-top:10px;">
+            <div style="opacity:.8;">
+              Uploaded {{ a.uploaded_at }} by {{ a.uploaded_by }}{% if a.note %} • {{ a.note }}{% endif %}
+            </div>
+            <div style="margin-top:10px;">
+              <img src="{{ a.file.url }}" alt="attachment">
+            </div>
+          </div>
+        {% empty %}
+          <div style="opacity:.8;">No attachments yet.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</body>
+</html>

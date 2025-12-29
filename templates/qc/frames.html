@@ -1,43 +1,75 @@
 {% extends "qc/base.html" %}
 {% block content %}
 
-<div class="card" style="margin-bottom:12px;">
-  <div style="display:flex;align-items:center;justify-content:space-between;">
-    <div>
-      <div class="muted">Inventory</div>
-      <div style="font-size:20px;font-weight:800;">Frames / Units</div>
-    </div>
-    <a class="btn" href="/import/frames/">Import CSV</a>
+<div class="page-title">
+  <h1>Frames / Units</h1>
+  <div class="actions">
+    <a class="btn" href="/frames/template/">Download Frame Template</a>
+    <form class="inline" action="/import/frames/" method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="file" name="file" required />
+      <button class="btn" type="submit">Upload Frame CSV</button>
+    </form>
   </div>
 </div>
 
-<div class="card">
-  <table>
-    <thead>
+<form method="get" class="filters">
+  <label>Status</label>
+  <select name="status">
+    <option value="">All</option>
+    {% for s in statuses %}
+      <option value="{{ s }}" {% if selected.status == s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+
+  <label>Store</label>
+  <select name="store">
+    <option value="">All</option>
+    {% for st in stores %}
+      <option value="{{ st.name }}" {% if selected.store == st.name %}selected{% endif %}>{{ st.name }}</option>
+    {% endfor %}
+  </select>
+
+  <label>Priority</label>
+  <select name="priority">
+    <option value="">All</option>
+    {% for p in priorities %}
+      <option value="{{ p }}" {% if selected.priority == p %}selected{% endif %}>{{ p }}</option>
+    {% endfor %}
+  </select>
+
+  <button class="btn" type="submit">Filter</button>
+</form>
+
+<table class="table">
+  <thead>
+    <tr>
+      <th>Unit</th>
+      <th>Order</th>
+      <th>Store</th>
+      <th>Model</th>
+      <th>Lab</th>
+      <th>Priority</th>
+      <th>Status</th>
+      <th>Received</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for u in units %}
       <tr>
-        <th>Unit ID</th>
-        <th>Order</th>
-        <th>Model</th>
-        <th>Lab</th>
-        <th>Priority</th>
-        <th>Status</th>
+        <td><b>{{ u.unit_id }}</b></td>
+        <td>{{ u.order_id }}</td>
+        <td>{{ u.store.name }}</td>
+        <td>{{ u.frame_model.model_name }}</td>
+        <td>{{ u.lab.name }}</td>
+        <td>{{ u.priority }}</td>
+        <td>{{ u.status }}</td>
+        <td>{{ u.received_at }}</td>
       </tr>
-    </thead>
-    <tbody>
-      {% for u in units %}
-        <tr>
-          <td>{{u.unit_id}}</td>
-          <td>{{u.order_id}}</td>
-          <td>{{u.frame_model}}</td>
-          <td>{{u.lab}}</td>
-          <td>{{u.priority}}</td>
-          <td><span class="pill">{{u.status}}</span></td>
-        </tr>
-      {% empty %}
-        <tr><td colspan="6" class="muted">No units yet. Import a CSV.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
+    {% empty %}
+      <tr><td colspan="8" class="muted">No units found.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
 
 {% endblock %}

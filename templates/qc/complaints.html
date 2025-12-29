@@ -1,10 +1,93 @@
 {% extends "qc/base.html" %}
 {% block content %}
-<div class="card">
-    <h2>Complaints (Legacy)</h2>
-    <p class="muted">
-        Complaints have been replaced by the QC workflow.
-    </p>
-    <a class="btn" href="/frames/">Go to QC</a>
+
+<div class="page-title">
+  <h1>Complaints</h1>
 </div>
+
+<div class="panel">
+  <h2>Create Complaint</h2>
+  <form action="/complaints/create/" method="post" enctype="multipart/form-data" class="form-grid">
+    {% csrf_token %}
+
+    <label>Store</label>
+    <select name="store_id" required>
+      {% for st in stores %}
+        <option value="{{ st.id }}">{{ st.name }}</option>
+      {% endfor %}
+    </select>
+
+    <label>Unit ID (optional)</label>
+    <input name="unit_id" placeholder="e.g. U-100023"/>
+
+    <label>Severity</label>
+    <select name="severity">
+      <option value="LOW">LOW</option>
+      <option value="MED" selected>MED</option>
+      <option value="HIGH">HIGH</option>
+    </select>
+
+    <label>Title</label>
+    <input name="title" required placeholder="Short title"/>
+
+    <label>Description</label>
+    <textarea name="description" rows="4" required placeholder="Full details..."></textarea>
+
+    <label>Photo (optional)</label>
+    <input type="file" name="image"/>
+
+    <div></div>
+    <button class="btn" type="submit">Create</button>
+  </form>
+</div>
+
+<form method="get" class="filters">
+  <label>Status</label>
+  <select name="status">
+    <option value="">All</option>
+    {% for s in statuses %}
+      <option value="{{ s }}" {% if selected.status == s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+
+  <label>Store</label>
+  <select name="store">
+    <option value="">All</option>
+    {% for st in stores %}
+      <option value="{{ st.name }}" {% if selected.store == st.name %}selected{% endif %}>{{ st.name }}</option>
+    {% endfor %}
+  </select>
+
+  <button class="btn" type="submit">Filter</button>
+</form>
+
+<table class="table">
+  <thead>
+    <tr>
+      <th>Created</th>
+      <th>Store</th>
+      <th>Unit</th>
+      <th>Severity</th>
+      <th>Status</th>
+      <th>Title</th>
+      <th>Created by</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for c in complaints %}
+      <tr>
+        <td>{{ c.created_at }}</td>
+        <td>{{ c.store.name }}</td>
+        <td>{% if c.unit %}{{ c.unit.unit_id }}{% else %}-{% endif %}</td>
+        <td><b>{{ c.severity }}</b></td>
+        <td>{{ c.status }}</td>
+        <td>{{ c.title }}</td>
+        <td>{{ c.created_by.username }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="7" class="muted">No complaints found.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
 {% endblock %}

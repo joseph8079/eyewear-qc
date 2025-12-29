@@ -1,0 +1,287 @@
+<!-- qc/templates/qc/inspection_wizard.html -->
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Inspection {{ unit.unit_id }}</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin:0; background:#0b0f19; color:#e8eefc; }
+    a { color:#9dd1ff; text-decoration:none; }
+    .wrap { max-width:1100px; margin:0 auto; padding:20px; }
+    .card { background:#121a2b; border:1px solid #1f2a44; border-radius:14px; padding:14px; margin-top:12px; }
+    .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+    .btn { display:inline-block; padding:10px 12px; border-radius:12px; background:#1b2742; border:1px solid #2a3b62; color:#e8eefc; cursor:pointer; }
+    .btn:hover { background:#223155; }
+    input, select, textarea { background:#0b0f19; border:1px solid #2a3b62; color:#e8eefc; padding:10px; border-radius:12px; width:100%; }
+    textarea { min-height:70px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; }
+    .pill { display:inline-block; padding:4px 10px; border-radius:999px; background:#1b2742; border:1px solid #2a3b62; font-size:12px; }
+    .tip { background:#0f1730; border:1px dashed #2a3b62; padding:10px; border-radius:12px; opacity:.9; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { padding:8px; border-bottom:1px solid #1f2a44; font-size:13px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row" style="justify-content:space-between; align-items:center;">
+      <div>
+        <h1 style="margin:0;">Inspection — {{ unit.unit_id }}</h1>
+        <div style="opacity:.8;">
+          Attempt {{ inspection.attempt_number }} • Model: {{ unit.frame_model }} • Lab: {{ unit.lab }}
+          {% if training_mode %} • <span class="pill">Training Mode</span>{% endif %}
+        </div>
+      </div>
+      <div class="row">
+        <a class="btn" href="{% url 'frames_list' %}">Back to Frames</a>
+        <a class="btn" href="{% url 'ui_dashboard' %}">Dashboard</a>
+      </div>
+    </div>
+
+    {% if training_mode %}
+    <div class="card tip">
+      <b>Training tips</b>
+      <div style="opacity:.9; margin-top:6px;">
+        Follow each step slowly. If anything looks off, add a defect and mark the stage FAIL.
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="grid2">
+      <div class="card">
+        <h3 style="margin-top:0;">1) Intake</h3>
+        {% if training_mode %}
+          <div class="tip">Tip: Verify unit ID + order ID on packaging before continuing.</div>
+        {% endif %}
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="save_intake">
+          <div class="row">
+            <div style="flex:1;">
+              <label>Verify Unit ID</label>
+              <input name="verified_unit_id" placeholder="{{ unit.unit_id }}">
+            </div>
+            <div style="flex:1;">
+              <label>Verify Order ID</label>
+              <input name="verified_order_id" placeholder="{{ unit.order_id }}">
+            </div>
+          </div>
+          <div style="margin-top:10px;">
+            <label>Status</label>
+            <select name="intake_status">
+              <option value="PASS">PASS</option>
+              <option value="FAIL">FAIL</option>
+            </select>
+          </div>
+          <div style="margin-top:10px;">
+            <label>Notes</label>
+            <textarea name="intake_notes" placeholder="Packaging, missing parts, etc."></textarea>
+          </div>
+          <div style="margin-top:10px;">
+            <button class="btn" type="submit">Save Intake</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0;">2) Deep Cosmetic Process (4 steps)</h3>
+        {% if training_mode %}
+          <div class="tip">Tip: A single failed step = stage FAIL.</div>
+        {% endif %}
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="save_cosmetic">
+          {% for s in deep_steps %}
+            <div style="margin-bottom:10px;">
+              <label>{{ s.label }}</label>
+              <select name="step_{{ s.key }}">
+                <option value="PASS">PASS</option>
+                <option value="FAIL">FAIL</option>
+              </select>
+              {% if training_mode %}
+                <div style="opacity:.8; font-size:12px; margin-top:4px;">{{ s.tip }}</div>
+              {% endif %}
+            </div>
+          {% endfor %}
+          <div style="margin-top:10px;">
+            <label>Notes</label>
+            <textarea name="cosmetic_notes" placeholder="Scratches, marks, looseness, etc."></textarea>
+          </div>
+          <div style="margin-top:10px;">
+            <button class="btn" type="submit">Save Cosmetic</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3 style="margin-top:0;">3) Fit / Alignment</h3>
+        {% if training_mode %}
+          <div class="tip">Tip: Check temple alignment and nosepads. If misaligned, add defect.</div>
+        {% endif %}
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="save_fit">
+          <div class="row">
+            <div style="flex:1;">
+              <label>Temple Alignment</label>
+              <input name="temple_alignment" placeholder="OK / needs adjust">
+            </div>
+            <div style="flex:1;">
+              <label>Nosepads</label>
+              <input name="nosepads" placeholder="OK / loose / replace">
+            </div>
+          </div>
+          <div style="margin-top:10px;">
+            <label>Status</label>
+            <select name="fit_status">
+              <option value="PASS">PASS</option>
+              <option value="FAIL">FAIL</option>
+            </select>
+          </div>
+          <div style="margin-top:10px;">
+            <label>Notes</label>
+            <textarea name="fit_notes"></textarea>
+          </div>
+          <div style="margin-top:10px;">
+            <button class="btn" type="submit">Save Fit</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0;">Add Defect (with optional photo + annotation JSON)</h3>
+        <form method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="add_defect">
+
+          <div class="row">
+            <div style="flex:1;">
+              <label>Stage</label>
+              <select name="defect_stage">
+                <option value="INTAKE">INTAKE</option>
+                <option value="COSMETIC" selected>COSMETIC</option>
+                <option value="FIT">FIT</option>
+              </select>
+            </div>
+            <div style="flex:1;">
+              <label>Severity</label>
+              <select name="severity">
+                <option value="LOW">LOW</option>
+                <option value="MED">MED</option>
+                <option value="HIGH">HIGH</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="margin-top:10px;">
+            <label>Category</label>
+            <input name="category" placeholder="Scratch / Chip / Loose hinge / etc.">
+          </div>
+
+          <div style="margin-top:10px;">
+            <label>Reason Code</label>
+            <input name="reason_code" placeholder="COS_SCRATCH_LENS / HINGE_LOOSE / ...">
+          </div>
+
+          <div style="margin-top:10px;">
+            <label>Notes</label>
+            <textarea name="defect_notes"></textarea>
+          </div>
+
+          <div style="margin-top:10px;">
+            <label>Photo (optional)</label>
+            <input type="file" name="defect_photo" accept="image/*">
+          </div>
+
+          <div style="margin-top:10px;">
+            <label>Annotation JSON (optional)</label>
+            <textarea name="annotation_json" placeholder='{"circles":[{"x":120,"y":80,"r":20}]}'></textarea>
+            <div style="opacity:.75; font-size:12px; margin-top:4px;">
+              For now, annotation is stored as JSON. Front-end drawing tool can be added next.
+            </div>
+          </div>
+
+          <div style="margin-top:10px;">
+            <button class="btn" type="submit">Add Defect</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;">4) Decision</h3>
+      <div class="grid2">
+        <div>
+          <div class="tip">
+            PASS → STORE_READY<br>
+            FAIL → REWORK ticket created
+          </div>
+        </div>
+        <div>
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="finalize">
+            <div class="row">
+              <div style="flex:1;">
+                <label>Final Result</label>
+                <select name="final_result">
+                  <option value="PASS">PASS</option>
+                  <option value="FAIL">FAIL</option>
+                </select>
+              </div>
+              <div style="flex:1;">
+                <label>Failed Stage (if FAIL)</label>
+                <select name="failed_stage">
+                  <option value="INTAKE">INTAKE</option>
+                  <option value="COSMETIC">COSMETIC</option>
+                  <option value="FIT">FIT</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="margin-top:10px;">
+              <label>Reason Summary (if FAIL)</label>
+              <textarea name="reason_summary" placeholder="Explain what failed and what to fix."></textarea>
+            </div>
+
+            <div style="margin-top:10px;">
+              <button class="btn" type="submit">Finalize</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;">Defects Logged</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Stage</th>
+            <th>Category</th>
+            <th>Reason</th>
+            <th>Severity</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in defects %}
+          <tr>
+            <td>{{ d.stage_result.stage }}</td>
+            <td>{{ d.category }}</td>
+            <td>{{ d.reason_code }}</td>
+            <td><b>{{ d.severity }}</b></td>
+            <td style="opacity:.85;">{{ d.notes }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" style="opacity:.8;">No defects yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</body>
+</html>

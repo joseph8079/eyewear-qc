@@ -1,20 +1,22 @@
+# eyewear_qc/urls.py
+
 from django.contrib import admin
 from django.urls import path, include
-from django.views.generic import RedirectView
-from qc import views as qc_views
+
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
     path("admin/", admin.site.urls),
 
-    # Django auth (adds /accounts/login/, /accounts/logout/, etc.)
+    # Django auth (provides /accounts/login/ and /accounts/logout/)
     path("accounts/", include("django.contrib.auth.urls")),
 
-    # Health endpoint (Render uses this)
-    path("health/", qc_views.health, name="health"),
-
-    # Root goes to UI
-    path("", RedirectView.as_view(url="/ui/", permanent=False), name="root"),
-
-    # QC app
+    # Your app
     path("", include("qc.urls")),
 ]
+
+# Serve uploaded media in DEBUG only (local/dev).
+# On Render prod, use a persistent disk or object storage for MEDIA.
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -1,38 +1,90 @@
-{% extends "qc/base.html" %}
-{% block content %}
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Complaints</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin:0; background:#0b0f19; color:#e8eefc; }
+    a { color:#9dd1ff; text-decoration:none; }
+    .wrap { max-width:1200px; margin:0 auto; padding:20px; }
+    .card { background:#121a2b; border:1px solid #1f2a44; border-radius:14px; padding:14px; margin-top:12px; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { padding:10px; border-bottom:1px solid #1f2a44; font-size:14px; }
+    th { text-align:left; opacity:.9; }
+    .btn { display:inline-block; padding:10px 12px; border-radius:12px; background:#1b2742; border:1px solid #2a3b62; color:#e8eefc; }
+    .btn:hover { background:#223155; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    input, select { background:#0b0f19; border:1px solid #2a3b62; color:#e8eefc; padding:10px; border-radius:12px; }
+    .pill { display:inline-block; padding:4px 10px; border-radius:999px; background:#1b2742; border:1px solid #2a3b62; font-size:12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+  {% include "qc/_navbar.html" %}
+    <div class="row" style="justify-content:space-between;">
+      <div>
+        <h1 style="margin:0;">Complaints</h1>
+        <div style="opacity:.8;">Store complaints / returns / issues</div>
+      </div>
+      <div class="row">
+        <a class="btn" href="{% url 'ui_dashboard' %}">Dashboard</a>
+        <a class="btn" href="{% url 'frames_list' %}">Frames</a>
+        <a class="btn" href="{% url 'complaints_new' %}">New Complaint</a>
+      </div>
+    </div>
 
-<div class="d-flex justify-content-between mb-3">
-  <h1 class="h4">Complaints</h1>
-  <a class="btn btn-primary btn-sm" href="{% url 'complaint_create' %}">+ Add Complaint</a>
-</div>
+    <div class="card">
+      <form method="get" class="row">
+        <input name="q" placeholder="Search title / unit / notes" value="{{ q }}">
+        <select name="store">
+          <option value="">All stores</option>
+          {% for s in stores %}
+            <option value="{{ s.code }}" {% if s.code == store_code %}selected{% endif %}>{{ s.name }} ({{ s.code }})</option>
+          {% endfor %}
+        </select>
+        <select name="status">
+          <option value="">All statuses</option>
+          {% for s in status_choices %}
+            <option value="{{ s }}" {% if s == status %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+        <button class="btn" type="submit">Filter</button>
+      </form>
+    </div>
 
-<table class="table table-striped table-sm">
-  <thead>
-    <tr>
-      <th>Date</th>
-      <th>SKU</th>
-      <th>Style</th>
-      <th>Store</th>
-      <th>Failure</th>
-      <th>Severity</th>
-      <th>Notes</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for c in complaints %}
-    <tr>
-      <td>{{ c.created_at|date:"Y-m-d H:i" }}</td>
-      <td>{{ c.variant.sku }}</td>
-      <td>{{ c.variant.style.style_code }}</td>
-      <td>{% if c.store %}{{ c.store.name }}{% else %}-{% endif %}</td>
-      <td>{{ c.get_failure_type_display }}</td>
-      <td>{{ c.get_severity_display }}</td>
-      <td>{{ c.notes }}</td>
-    </tr>
-    {% empty %}
-    <tr><td colspan="7" class="text-muted">No complaints</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
-
-{% endblock %}
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Created</th>
+            <th>Store</th>
+            <th>Status</th>
+            <th>Category</th>
+            <th>Title</th>
+            <th>Unit</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in complaints %}
+          <tr>
+            <td style="opacity:.85;">{{ c.created_at }}</td>
+            <td>{{ c.store.code }}</td>
+            <td><span class="pill">{{ c.status }}</span></td>
+            <td>{{ c.category }}</td>
+            <td><b>{{ c.title }}</b></td>
+            <td>{% if c.unit %}{{ c.unit.unit_id }}{% else %}{{ c.unit_id_text }}{% endif %}</td>
+            <td style="text-align:right;">
+              <a class="btn" href="{% url 'complaints_detail' c.id %}">Open</a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="7" style="opacity:.8;">No complaints found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>
