@@ -1,14 +1,14 @@
 from django.contrib import admin
 from django.urls import path, include
-from django.contrib.auth import views as auth_views
+from qc import views as qc_views
 
 urlpatterns = [
     path("admin/", admin.site.urls),
 
-    # QC app
-    path("", include("qc.urls")),
+    # Always-safe endpoints (Render + monitoring)
+    path("", qc_views.home, name="root"),
+    path("health/", qc_views.health, name="health"),
 
-    # Auth (branded login template lives in templates/registration/login.html)
-    path("accounts/login/", auth_views.LoginView.as_view(), name="login"),
-    path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
+    # Everything else (UI + API)
+    path("", include("qc.urls")),
 ]

@@ -2,11 +2,10 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    # Root should be safe JSON (Render health checks)
-    path("", views.home, name="home"),
+    # Health
     path("health/", views.health, name="qc-health"),
 
-    # UI pages (HTML)
+    # UI Pages
     path("ui/", views.ui_home, name="ui-home"),
     path("frames/", views.legacy_frames_page, name="legacy-frames-page"),
     path("complaints/", views.legacy_complaints_page, name="legacy-complaints-page"),
@@ -26,4 +25,3 @@ urlpatterns = [
     path("api/qc/finalize/", views.finalize_inspection, name="qc-finalize"),
     path("api/qc/dashboard/", views.dashboard, name="qc-dashboard"),
 ]
-
