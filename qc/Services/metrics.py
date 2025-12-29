@@ -1,4 +1,4 @@
-# qc/services/metrics.py
+
 from datetime import timedelta
 from django.utils import timezone
 from django.db.models import Count, Q, Avg
